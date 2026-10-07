@@ -1,0 +1,15 @@
+{
+  "name": "openarms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verified skill routing and runtime governance for OpenCode",
+  "license": "MIT",
+  "repository": "github:apase95/OpenArms",
+  "type": "module",
+  "dependencies": {
+    "@opencode-ai/plugin": "1.18.34"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/server.test.ts"
+  }
+}

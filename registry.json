@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "packages": {
+    "docs": {
+      "core": ["technical-writing"],
+      "optional": [
+        "docs-editor",
+        "document-service",
+        "aws-well-architected-review",
+        "paper-writing",
+        "math-proof",
+        "verified-web-research"
+      ],
+      "detect": {
+        "files": [
+          "mkdocs.yml",
+          "mkdocs.yaml",
+          "docusaurus.config.js",
+          "docusaurus.config.ts",
+          "cdk.json",
+          "samconfig.toml",
+          "serverless.yml",
+          "serverless.yaml",
+          "template.yaml",
+          "template.yml"
+        ],
+        "extensions": [".md", ".mdx"],
+        "dependencies": ["aws-cdk-lib", "@aws-sdk/client-s3"]
+      }
+    }
+  },
+  "skills": {
+    "technical-writing": "skills/technical-writing/SKILL.md",
+    "docs-editor": "skills/docs-editor/SKILL.md",
+    "document-service": "skills/document-service/SKILL.md",
+    "aws-well-architected-review": "skills/aws-well-architected-review/SKILL.md",
+    "paper-writing": "skills/paper-writing/SKILL.md",
+    "math-proof": "skills/math-proof/SKILL.md",
+    "verified-web-research": "skills/verified-web-research/SKILL.md"
+  }
+}

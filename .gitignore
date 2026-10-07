@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.openarms/
+*.log
+.env
+.env.*
+!.env.example
+state.json
+*.db
+*.db-shm
+*.db-wal
