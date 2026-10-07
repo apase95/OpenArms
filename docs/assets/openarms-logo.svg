@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="140" viewBox="-12 -9 264 66" role="img" aria-labelledby="title desc">
+  <title id="title">OpenArms</title>
+  <desc id="desc">A bold pixel wordmark with gray open lettering, contrasting arms lettering, and inset block shadows.</desc>
+  <style>
+    .open { fill: #656363; }
+    .arms { fill: #211e1e; }
+    .shadow { fill: #cfcecd; }
+    @media (prefers-color-scheme: dark) {
+      .open { fill: #858080; }
+      .arms { fill: #f1ecec; }
+      .shadow { fill: #4b4646; }
+    }
+  </style>
+  <!-- Six-unit stems and counters share a single pixel grid. Inset shadows
+       leave the upper part of each counter open, matching the terminal style. -->
+  <g class="shadow">
+    <path d="M6 18H18V30H6Z M36 18H48V30H36Z M66 24H84V30H66Z M96 18H108V36H96Z"/>
+    <path d="M126 24H138V30H126Z M156 18H168V36H156Z M186 18H192V36H186Z M198 18H204V36H198Z M222 12H240V18H222Z M216 24H234V30H216Z"/>
+  </g>
+  <g class="open" fill-rule="evenodd">
+    <path d="M0 6H24V36H0Z M6 12V30H18V12Z"/>
+    <path d="M30 6H54V36H36V42H30Z M36 12V30H48V12Z"/>
+    <path d="M60 6H84V24H66V30H84V36H60Z M66 12V18H78V12Z"/>
+    <path d="M90 6H114V36H108V12H96V36H90Z"/>
+  </g>
+  <g class="arms" fill-rule="evenodd">
+    <path d="M120 6H144V36H120V18H138V12H120Z M126 24V30H138V24Z"/>
+    <path d="M150 6H174V18H168V12H156V36H150Z"/>
+    <path d="M180 6H210V36H204V12H198V36H192V12H186V36H180Z"/>
+    <path d="M216 6H240V12H222V18H240V36H216V30H234V24H216Z"/>
+  </g>
+</svg>
