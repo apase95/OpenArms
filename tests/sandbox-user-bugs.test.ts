@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises"
 import path from "node:path"
+import { tmpdir } from "node:os"
 import { interceptLocalPrompt, registerLocalSubmit, sessionAction, confirmationKey } from "../plugins/tui-core.ts"
 import { createRuntime, HOME_SESSION } from "../src/runtime.ts"
 import { initializeSession } from "../src/skills-service.ts"
@@ -59,7 +60,7 @@ test("command context never becomes session authority; confirmation has no typed
 })
 
 test("approved exact IDs share valid status/load context, explicit consent only; missing identity denies", async () => {
-  const root = await mkdtemp("/tmp/opencode/arms-user-context-")
+  const root = await mkdtemp(path.join(tmpdir(), "arms-user-context-"))
   try {
     const content = "Synthetic writing interface"
     await mkdir(path.join(root, "technical-writing"))
@@ -102,7 +103,7 @@ test("approved exact IDs share valid status/load context, explicit consent only;
 })
 
 test("legacy task identity is initialized for status; Home is consumed once and roots inherit selection without authority", async () => {
-  const root = await mkdtemp("/tmp/opencode/arms-user-bugs-")
+  const root = await mkdtemp(path.join(tmpdir(), "arms-user-bugs-"))
   try {
     const registry = { version: 1, packages: { docs: { core: ["technical-writing"], optional: ["docs-editor"], detect: { always: true } } }, skills: { "technical-writing": "technical-writing/interface.txt", "docs-editor": "docs-editor/interface.txt" } }
     const stateFile = path.join(root, "state.json")
