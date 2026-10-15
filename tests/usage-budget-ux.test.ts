@@ -8,6 +8,39 @@ import { defaultBudgetPolicy, mergeBudgetPolicy } from "../src/budget-policy.ts"
 import { UsageStore } from "../src/usage-store.ts"
 import { executeUsageCommand } from "../src/usage-query.ts"
 import { watchUsagePrompt } from "../plugins/tui-core.ts"
+import { governanceHooks } from "../src/governance-hooks.ts"
+import { readdir } from "node:fs/promises"
+
+test("compactor hook persists only numeric domain measurements; session and lifetime savings agree", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "arms-compaction-"))
+  try {
+    const hook = governanceHooks(root, root)["tool.execute.after"]
+    const raw = "PASS suite.test.ts\n".repeat(3000) + "Tests: 3000 passed, 3000 total\n"
+    for (const session of ["s", "other"]) {
+      const output = { title: "private", output: raw, metadata: { exit: 0 } }
+      await hook({ tool: "bash", sessionID: session, callID: "c", args: { command: "npm test" } }, output)
+      assert.equal(output.metadata.exit, 0)
+    }
+    const runtime = createUsageRuntime(root, root), policy = defaultBudgetPolicy()
+    const records = (await runtime.store.read(policy)).records
+    assert.equal(records.length, 2)
+    assert.equal(records[0].compaction?.domain, "test")
+    const saved = records[0].compaction!
+    const tokens = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 15 }).format(Math.max(0, saved.rawBytes - saved.compactedBytes) / 4)
+    assert.ok((await runtime.command("/usage session", "s")).includes(`${tokens} tokens (estimated bytes/4`))
+    const budget = await runtime.command("/budget", "s")
+    assert.match(budget, /Project lifetime \(retained local records\)/)
+    assert.ok(budget.includes(`${tokens} tokens (estimated bytes/4`))
+    const files = (await readdir(path.join(root, "governance"))).filter(f => f.endsWith(".json"))
+    const event = JSON.parse(await readFile(path.join(root, "governance", files[0]), "utf8"))
+    assert.equal(event.domain, "test"); assert.equal(event.compactedBytes, event.contextBytes)
+    assert.doesNotMatch(JSON.stringify(event) + await readFile(path.join(root, "usage/source.jsonl"), "utf8"), /npm test|suite.test.ts|private|full log/)
+    const legacy = { ...records[0], session: "s", id: "legacy", compaction: undefined }
+    await runtime.store.upsert(legacy, policy)
+    assert.match(await runtime.command("/usage session", "s"), /partial: legacy calls unknown/)
+    await assert.rejects(runtime.store.upsert({ ...legacy, id: "bad", compaction: { ...saved, savingsRatio: Infinity } }, policy), /CORRUPT_USAGE/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
 
 test("slash host IDs survive completed-message ingestion, reload, model picker, dashboard and warnings", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "arms-host-model-"))

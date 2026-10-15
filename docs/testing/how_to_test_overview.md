@@ -7,6 +7,9 @@ Tài liệu này dành cho người muốn tự thao tác, quan sát màn hình 
 
 | Hướng dẫn | Task | Bạn sẽ kiểm tra được gì? |
 |---|---|---|
+| [Sprint 3.4 v2](how_to_test/Sprint_34v2.md) | TSK-312v2–314v2 | Build formats, snippets, fallback và fixture 30KB→<1KB; không live compiler proof |
+| [Sprint 3.5 v2](how_to_test/Sprint_35v2.md) | TSK-315v2–319v2 | Safety, project raw sink, telemetry/usage; Docker PTY real tools + synthetic model transport |
+| [Sprint 3.3 v2](how_to_test/Sprint_33v2.md) | TSK-308v2–311v2 | Git diff priorities/summary, bounded excerpts, observed read/cat detection; không build/phase acceptance |
 | [Sprint 2.4](how_to_test/Sprint_24.md) | TSK-216–219 | Finite error/property matrix, production action-contract fixture, docs audit và operator gates; không renderer/PTY proof |
 | [Sprint 2.1](how_to_test/Sprint_21.md) | TSK-201–204 | Schema/migration/hash/integrity CLI, synthetic CI; không chứng thực library thật |
 | [Sprint 2.2](how_to_test/Sprint_22.md) | TSK-205–210 | Core strict API/grants/hash/race/budget fixtures; chưa kích hoạt host loader |

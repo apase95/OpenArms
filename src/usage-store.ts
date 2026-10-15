@@ -2,6 +2,7 @@ import { mkdir, readFile, open, rename, rm } from "node:fs/promises"
 import { randomUUID, createHash } from "node:crypto"
 import path from "node:path"
 import { budgetMetrics, validateBudgetPolicy, type BudgetPolicy } from "./budget-policy.ts"
+import { validateCompaction, summarizeCompaction, type CompactionMeasurement } from "./governance-telemetry.ts"
 
 export const usageMetrics = [...budgetMetrics, "rawToolOutputBytes", "truncationCount", "loadedSkillTokens"] as const
 export type UsageMetric = typeof usageMetrics[number]
@@ -10,6 +11,7 @@ export type UsageRecord = {
   timestamp: string; revision: number; completed: boolean
   task?: string; provider?: string; model?: string; agent?: string; tool?: string
   metrics: Partial<Record<UsageMetric, number>>; estimated?: UsageMetric[]
+  compaction?: CompactionMeasurement
 }
 export type Warning = { schemaVersion: 1; policyVersion: string; scope: "day" | "session" | "task"; scopeID: string; project: string; metric: string; threshold: number; crossed: number[]; current: number; limit: number; action: "report-only" }
 export const warningPolicyID = (policy: BudgetPolicy) => `policy-${createHash("sha256").update(JSON.stringify(policy)).digest("hex")}`
@@ -22,7 +24,8 @@ const hostIdentifier = (v: unknown) => typeof v === "string" && /^[\x21-\x7e]{1,
 export function validateUsageRecord(v: unknown): asserts v is UsageRecord {
   if (!v || typeof v !== "object" || Array.isArray(v)) invalid()
   const r = v as UsageRecord
-  if (Object.keys(r).some(k => !["schemaVersion", "kind", "id", "session", "project", "timestamp", "revision", "completed", "task", "provider", "model", "agent", "tool", "metrics", "estimated"].includes(k))) invalid()
+   if (Object.keys(r).some(k => !["schemaVersion", "kind", "id", "session", "project", "timestamp", "revision", "completed", "task", "provider", "model", "agent", "tool", "metrics", "estimated", "compaction"].includes(k))) invalid()
+   if (r.compaction !== undefined && (r.kind !== "tool" || !validateCompaction(r.compaction) || r.compaction.rawBytes !== r.metrics?.rawToolOutputBytes || r.compaction.compactedBytes !== r.metrics?.toolOutputBytes)) invalid()
   if (r.schemaVersion !== 1 || !["message", "tool"].includes(r.kind) || ![r.id, r.session, r.project].every(identifier)) invalid()
   for (const k of ["task", "agent", "tool"] as const) if (r[k] !== undefined && !identifier(r[k])) invalid()
   for (const k of ["provider", "model"] as const) if (r[k] !== undefined && !hostIdentifier(r[k])) invalid()
@@ -58,7 +61,9 @@ export function summarizeUsage(records: UsageRecord[]) {
   })) as Record<UsageMetric, MetricValue>
   const contributors = records.filter(r => r.kind === "tool").map(r => ({ tool: r.tool ?? "unknown", id: r.id, rawBytes: r.metrics.rawToolOutputBytes ?? null, contextBytes: r.metrics.toolOutputBytes ?? null }))
     .sort((a, b) => (b.contextBytes ?? -1) - (a.contextBytes ?? -1) || a.id.localeCompare(b.id))
-  return { metrics, turns: records.filter(r => r.kind === "message").length, contributors, attribution: "correlation only" as const }
+  const tools = records.filter(r => r.kind === "tool")
+  const compaction = summarizeCompaction(tools.flatMap(r => r.compaction ? [r.compaction] : []), tools.filter(r => !r.compaction).length)
+  return { metrics, compaction, turns: records.filter(r => r.kind === "message").length, contributors, attribution: "correlation only" as const }
 }
 export function rebuildUsage(records: UsageRecord[], policy: BudgetPolicy) {
   validateBudgetPolicy(policy)

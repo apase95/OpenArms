@@ -27,6 +27,16 @@
     "dependencies": { "tests": ["tests/core.test.ts", "tests/server.test.ts", "tests/test-runner.test.mjs", "tests/smoke-runner.test.mjs"], "full": true, "smoke": ["smoke-runtime", "tui-smoke"], "reason": "DEPENDENCY_CONTRACT" }
   },
   "files": {
+    ".opencode/handoff-sprint34-finish.md": "docs",
+    ".opencode/handoff-sprint35-telemetry.md": "docs",
+    "src/build-output-compactor.ts": "core",
+    ".opencode/handoff-sprint34-35v2.md": "docs",
+    ".opencode/handoff-sprint33v2.md": "docs",
+    "src/git-diff-output-compactor.ts": "core",
+    "src/file-inspection-compactor.ts": "core",
+    ".opencode/handoff-sprint32v2.md": "docs",
+    "src/test-output-compactor.ts": "core",
+    "src/linter-output-compactor.ts": "core",
     ".opencode/handoff-sandbox-retention-review.md": "docs",
     ".opencode/handoff-retention-timeout.md": "docs",
     "scripts/synthetic-context.mjs": "smoke-infra",

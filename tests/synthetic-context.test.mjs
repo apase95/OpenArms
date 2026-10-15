@@ -5,6 +5,12 @@ import { contextBytes, contextInputs, syntheticDigest } from '../scripts/synthet
 import { commandFor } from '../scripts/arms-test.mjs'
 import path from 'node:path'
 
+test('synthetic host inventory includes every default domain compactor', () => {
+  for (const name of ['test', 'linter', 'git-diff', 'file-inspection', 'build']) {
+    assert.ok(contextInputs.includes(`src/${name}-output-compactor.ts`.replace('file-inspection-output', 'file-inspection')), name)
+  }
+})
+
 test('synthetic runtime is explicit and forwarded in parsed options', () => {
   assert.equal(parseArgs(['smoke-runtime', '--synthetic']).synthetic, true)
   assert.equal(parseArgs(['verify', '--synthetic']).synthetic, true)

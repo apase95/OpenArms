@@ -47,6 +47,26 @@ inherited global day cost limit. Complete effective policies never contain null.
 Other metrics, scopes, timezone and unrelated policy settings are preserved.
 Unsupported `ask`/`enforce` configuration is rejected, never written by this editor.
 
+## Domain-aware compactor savings
+
+`/usage session` and `/usage project` show **Compactor savings** for that scope;
+project means all retained local records for this project, not all projects or a
+provider account lifetime. `/budget` shows today, active session, and the retained
+project lifetime savings. Home never substitutes the project total for a session.
+
+This is an estimate of net avoided output tokens: `max(0, sum(rawBytes) -
+sum(compactedBytes)) / 4`. Compacted bytes are final model-visible UTF-8 bytes,
+including full-log references, omission markers and failure warnings. Expanding
+outputs offset reductions before the nonnegative display clamp. The stored ratio
+is `(rawBytes - compactedBytes) / rawBytes` (zero for zero raw bytes); negative
+ratios are valid. These are not tokenizer counts, billed-token reductions, cache
+replay savings or USD credits; existing host token/cost accounting is unchanged.
+
+Only explicit validated domain measurements contribute. Older records still load
+but display unknown savings, or mark the measured subtotal partial when mixed.
+Overflowed totals show unknown rather than an imprecise savings claim. Telemetry
+stores domain enum and numeric sizes/ratio, never command, raw text or log paths.
+
 ## Proactive warnings
 
 A bounded 1-second local-store poll delivers warnings in `warn` mode only, with

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { link, mkdir, open, readdir, stat, unlink } from "node:fs/promises"
+import { link, lstat, mkdir, open, readdir, stat, unlink } from "node:fs/promises"
 import path from "node:path"
 import { bytes, governOutput } from "./output-governor.ts"
 import { createTelemetry } from "./governance-telemetry.ts"
@@ -11,8 +11,17 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 // sink contract, but no process spawn or shell dependency in this adapter.
 export function governanceHooks(directory: string, projectRoot = directory) {
   const usage = createUsageRuntime(directory, projectRoot)
-  const folder = path.join(directory, "governance")
   const save = async (raw: string, identity: string, extension: string) => {
+    const folder = extension === "log" ? path.join(projectRoot, ".openarms", "logs") : path.join(directory, "governance")
+    if (extension === "log") {
+      // Reject pre-existing symlink/non-directory redirects, including the parent.
+      // This is a local owner-controlled project, not a hostile shared filesystem.
+      for (const target of [path.join(projectRoot, ".openarms"), folder]) {
+        await mkdir(target, { mode: 0o700 }).catch(error => { if (error.code !== "EEXIST") throw error })
+        const info = await lstat(target)
+        if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022)) throw Error("Unsafe project log directory")
+      }
+    }
     await mkdir(folder, { recursive: true, mode: 0o700 })
     let file = path.join(folder, `${hash(identity).slice(0, 24)}-${randomUUID()}.${extension}`)
     const handle = await open(file, "wx", 0o600)
@@ -50,20 +59,22 @@ export function governanceHooks(directory: string, projectRoot = directory) {
       // Command is used only for local classification, never persisted in telemetry/log names.
       const command = typeof input.args?.redactedCommand === "string" ? input.args.redactedCommand
         : input.tool === "bash" && typeof input.args?.command === "string" ? input.args.command : ""
-      const governed = await governOutput(raw, { command, save: text => save(text, JSON.stringify([input.sessionID, input.callID]), "log"), authoritative: input.tool === "load_skill" || input.tool === "load_verified_skill" })
-      output.output = governed.text
       const requested = input.tool === "read" && typeof input.args?.filePath === "string" ? input.args.filePath : undefined
+      const governed = await governOutput(raw, { persistRaw: true, command, toolName: input.tool, path: requested, save: text => save(text, JSON.stringify([input.sessionID, input.callID]), "log"), authoritative: input.tool === "load_skill" || input.tool === "load_verified_skill" || input.tool === "load_skill_package" })
+      output.output = governed.text
       // Observed host output, including wrappers/ranges: never infer full-file size/lines.
       const lines = raw ? raw.split(/\r\n|\r|\n/).length - (/[\r\n]$/.test(raw) ? 1 : 0) : 0
       const policy = requested ? evaluateFile({ path: requested, size: bytes(raw), lines }, { mode: "shadow" }) : undefined
       await emit({ version: 1, tool: input.tool, sessionID: input.sessionID, callID: input.callID,
         rawBytes: governed.rawBytes, contextBytes: governed.contextBytes, estimatedTokens: Math.ceil(governed.contextBytes / 4),
+        domain: governed.domain, compactedBytes: governed.contextBytes, savingsRatio: governed.rawBytes ? (governed.rawBytes - governed.contextBytes) / governed.rawBytes : 0,
         truncation: governed.hardCapApplied ? "hard-cap" : governed.omittedBytes ? "compact" : "none",
         omittedBytes: governed.omittedBytes, omittedLines: governed.omittedLines, logStatus: governed.logStatus as "not-needed" | "written" | "failed",
         mode: "shadow", rule: policy?.rule ?? "NONE", decision: policy?.decision ?? "ALLOW",
         ...(policy ? { pathID: hash(policy.normalizedPath) } : {}) })
       await usage.capture({ schemaVersion: 1, kind: "tool", id: input.callID, session: input.sessionID,
         timestamp: new Date().toISOString(), revision: 0, completed: true, tool: input.tool,
+        compaction: { domain: governed.domain, rawBytes: governed.rawBytes, compactedBytes: governed.contextBytes, savingsRatio: governed.rawBytes ? (governed.rawBytes - governed.contextBytes) / governed.rawBytes : 0 },
         metrics: { toolOutputBytes: governed.contextBytes, rawToolOutputBytes: governed.rawBytes,
           truncationCount: governed.hardCapApplied || governed.omittedBytes ? 1 : 0 },
       })

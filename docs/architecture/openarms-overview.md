@@ -38,6 +38,29 @@ load or completed redesign validation is claimed here.
 
 ## Historical baseline and design context
 
+### Domain-aware governor source update (15/10/2026)
+
+The production hook saves raw output with an exclusive owner-only file and
+`FileHandle.sync()` before normalization/classification/compaction, including
+short authoritative responses (returned unchanged). Raw logs use
+`<projectRoot>/.openarms/logs`, with unique opaque IDs, exclusive 0600 files and
+0700 newly created directories. Existing symlink/non-directory or group/world
+writable log directories are rejected. The threat model is an owner-controlled
+local project, not concurrent hostile filesystem mutation. Numeric telemetry
+remains separate in `<router-state-directory>/governance`. Failed sinks explicitly return
+`LOG_WRITE_FAILED`, never a persisted-log claim. Successful sink completion is
+the boundary of the full-log guarantee, not a disk-failure guarantee.
+
+Default parsers cover test, linter, git diff and build; read/cat inspection is a
+separate guard. Unknown formats use generic bounded fallback. Final context,
+including markers/provenance, is capped at 50,000 UTF8 bytes. Numeric telemetry
+adds fixed-enum domain, rawBytes, compactedBytes (final visible context), and
+weighted savingsRatio; legacy measurements remain unknown. Usage/budget savings
+are net bytes/4 estimates, not tokenizer, billing or provider-cost measurements.
+See [Sprint 35 synthetic-host acceptance](../testing/how_to_test/Sprint_35v2.md).
+Docker OpenCode 1.18.35 PTY runs real test/diff/compiler tools through a local
+synthetic model transport. This is not live-provider or real-library acceptance.
+
 **Everything below preserves the pre-redesign overview.** Approved registries,
 `load_verified_skill`, grants, v1 fail-closed, package locks and legacy loaders
 describe their historical revision or proposed roadmap, not current setup.

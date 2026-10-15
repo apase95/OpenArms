@@ -22,7 +22,7 @@ const port = await new Promise((resolve, reject) => {
 const startupMs = Number(process.env.OPENARMS_SERVER_STARTUP_MS || 60000)
 const requestMs = Number(process.env.OPENARMS_REQUEST_TIMEOUT_MS || 120000)
 assert.ok(Number.isInteger(startupMs) && startupMs > 0 && Number.isInteger(requestMs) && requestMs > 0, "Invalid runtime stage timeout")
-const server = spawn("opencode", ["serve", "--hostname", "127.0.0.1", "--port", String(port), "--print-logs"], { stdio: ["ignore", "pipe", "pipe"] })
+const server = spawn("opencode", ["serve", "--hostname", "127.0.0.1", "--port", String(port), "--print-logs", "--log-level", "DEBUG"], { stdio: ["ignore", "pipe", "pipe"] })
 const output = new BoundedOutput()
 server.stdout.on("data", (chunk) => { output.push(chunk, "stdout"); if (!process.stdout.write(chunk)) server.stdout.pause() })
 server.stderr.on("data", (chunk) => { output.push(chunk, "stderr"); if (!process.stderr.write(chunk)) server.stderr.pause() })
@@ -34,6 +34,9 @@ const controller = new AbortController()
 const handlers = ["SIGINT", "SIGTERM"].map((signal) => [signal, () => { interrupted ??= signal; controller.abort(new Error(`SIGNAL: ${signal}`)); server.kill(signal) }])
 for (const [signal, handler] of handlers) process.on(signal, handler)
 const base = `http://127.0.0.1:${port}`
+const eventsController = new AbortController()
+let eventsTask
+const pluginErrors = []
 const get = async (route) => {
   console.log(`STAGE: endpoint-request:${route}`)
   let response
@@ -57,12 +60,40 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
   assert.ok(healthy, `TIMEOUT: server-startup limit=${startupMs}ms; OpenCode did not become healthy: ${output.sample()}`)
+  // Subscribe before any instance/config initialization. Plugin failures are bus
+  // events in this host version, not necessarily console messages.
+  const events = await fetch(`${base}/global/event`, { signal: AbortSignal.any([controller.signal, eventsController.signal]) })
+  assert.equal(events.status, 200, "Global event stream unavailable")
+  eventsTask = (async () => {
+    const reader = events.body.getReader(), decoder = new TextDecoder()
+    let pending = ""
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      pending = (pending + decoder.decode(value, { stream: true })).slice(-131072)
+      let end
+      while ((end = pending.indexOf("\n\n")) >= 0) {
+        const frame = pending.slice(0, end); pending = pending.slice(end + 2)
+        for (const line of frame.split("\n")) {
+          if (!line.startsWith("data:")) continue
+          try {
+            const event = JSON.parse(line.slice(5)), payload = event.payload ?? event
+            if (payload.type === "session.error" && pluginErrors.length < 16) {
+              const diagnostic = JSON.stringify(payload).slice(0, 8192)
+              pluginErrors.push(diagnostic)
+              console.error(`HOST_EVENT: ${diagnostic}`)
+            }
+          } catch { /* Ignore non-JSON keepalive frames. */ }
+        }
+      }
+    }
+  })().catch(error => { if (!eventsController.signal.aborted) console.error(`EVENT_STREAM: ${error.message}`) })
   const config = await get("/config")
   assert.ok(config.plugin.includes("file:///opt/openarms/plugins/skill-router-server.ts"))
   assert.equal(config.permission.skill["*"], "deny")
   assert.equal(config.permission.read["*SKILL.md"], "deny")
   const tools = await get("/experimental/tool/ids")
-   assert.ok(tools.includes("load_skill"), "Server plugin did not register load_skill")
+    assert.ok(tools.includes("load_skill"), `Server plugin did not register load_skill; registered=${JSON.stringify(tools)}`)
    assert.ok(!tools.includes("load_verified_skill"), "Legacy verified loader must not be exposed")
   assert.ok(!tools.includes("load_skill_package"), "Legacy tool must be removed")
    console.log("PASS: runtime binary version, effective isolated paths/config, server health and sole local loader registration checks=5")
@@ -71,6 +102,8 @@ try {
   console.error(error.stack)
   process.exitCode = interrupted === "SIGINT" ? 130 : interrupted === "SIGTERM" ? 143 : 1
 } finally {
+  eventsController.abort()
+  await eventsTask
   for (const [signal, handler] of handlers) process.off(signal, handler)
   server.kill("SIGTERM")
   if (!spawnError && server.pid && server.exitCode === null && server.signalCode === null) {

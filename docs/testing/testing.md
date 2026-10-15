@@ -1,7 +1,12 @@
 # Bảng lệnh và script
 
 Domain-aware foundation: [Sprint 3.1 v2](how_to_test/Sprint_31v2.md)
-(classifier/router/fallback; chưa có specialized parsers hoặc savings acceptance).
+(classifier/router/fallback). Specialized test/linter parsers:
+[Sprint 3.2 v2](how_to_test/Sprint_32v2.md). Git diff và read/cat inspection:
+[Sprint 3.3 v2](how_to_test/Sprint_33v2.md).
+Build parser/fixtures: [Sprint 3.4 v2](how_to_test/Sprint_34v2.md).
+Safety, telemetry/usage và Docker PTY acceptance qua synthetic provider cục bộ:
+[Sprint 3.5 v2](how_to_test/Sprint_35v2.md). Không phải live-provider acceptance.
 
 Thao tác và kết quả mong đợi: [hướng dẫn tự kiểm tra](how_to_test_overview.md).
 Governor/policy/telemetry: [Sprint 1.2](how_to_test/Sprint_12.md), gồm giới hạn host,
@@ -103,6 +108,10 @@ image/build locks/cache tách mode synthetic. Context tạm được xóa sau bu
 runtime/PTY dùng image đã inspect với `--pull never` (không `--build`), volumes
 riêng được cleanup. Context đã xóa chặn implicit rebuild thay vì fallback repo.
 PTY chọn root synthetic bằng editor khi cấu hình ban đầu chưa có path.
+PTY fixture sau các regression UI còn dùng model transport HTTP loopback tổng hợp
+để host thực thi `npm test`, `git diff`, `g++` thật, kiểm tra hooks/exit/telemetry,
+raw project `.openarms/logs` và savings. Reporter test là fixture tổng hợp có
+assertion Node thật; compiler và Git là binary thật. Không cần credential/model mạng.
 Pass chứng minh host API/UI/local loader trên generated data, không chứng minh
 real library integrity, provider/model behavior hoặc installed mounts.
 Normal modes giữ behavior cũ và có thể đọc library thật: chỉ chạy ngoài session

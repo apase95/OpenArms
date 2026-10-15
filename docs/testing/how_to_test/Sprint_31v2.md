@@ -1,7 +1,8 @@
 # Sprint 3.1 v2 — Classifier và Router
 
 Phạm vi TSK-301v2–304v2, không thay hướng dẫn usage/budget Sprint_31.md.
-Chưa có parser chuyên biệt; chưa chứng minh tiết kiệm 92–98% hay nghiệm thu phase.
+Foundation tại mốc 3.1 chưa có parser chuyên biệt. Nay xem
+[Sprint 3.2 v2](Sprint_32v2.md) cho default test/linter parsers; chưa nghiệm thu phase.
 
 ## Kiểm tra từ repository root
 
@@ -31,12 +32,13 @@ phân loại trong bộ nhớ, không ghi command vào telemetry/tên log.
 `domain` chỉ là phân loại, không chứng minh parser chạy. `fastPath` đúng khi
 normalized/escaped text **<1000 UTF8 bytes** và không có warning/error/failure,
 PASS/FAIL, tick, phần trăm/progress bar hoặc TAP banner. Đúng 1000 bytes phải route.
-Noise chỉ chặn bypass, chưa bị xóa bởi foundation.
+Noise chặn bypass; parsers 3.2 chỉ bỏ noise theo format được nhận diện.
 
 Inject `DomainCompactor` với domain, `match(command, text)` và
 `compact(text, {maxBytes: 32000})`. Text contract gọi rawText nhưng router truyền
 stream sau normalize/escape, trước compact. Parser đầu cùng domain match thắng.
-Không parser/format unsupported dùng generic head/tail; match/compact ném lỗi dùng
+Không truyền compactors sẽ dùng defaults test/linter/git-diff (xem [Sprint 3.3 v2](Sprint_33v2.md)); inject thay thế defaults,
+`[]` tắt chúng. Không parser/format unsupported dùng generic head/tail; match/compact ném lỗi dùng
 generic và `GOVERNOR_FAILED`, không lộ exception. Callback compact cũ vẫn ưu tiên
 và nhận raw. Authoritative skill bỏ qua router/normalize/escape; quá cap trả refusal,
 không trả fragment skill. Marker từ tool/parser không thể giả `[OPENARMS:`.
@@ -61,5 +63,5 @@ argument incidental của echo/cat/node. Wrapper/alias lạ dùng signature neo 
 TAP, PASS/FAIL kèm file JS/TS/Python, diff --git, lỗi TS/Rust/GCC, flake8/ESLint.
 Signature nhiều domain xung đột trả generic; PASS/FAIL trơ trọi không đủ.
 Đây không phải shell parser: shell -c, pipeline, git global flags và wrapper flags
-phức tạp có thể fallback generic. Chưa lọc PASS/warnings/lockfile; các parser và
-live-provider/PTY/phase acceptance thuộc sprint sau.
+phức tạp có thể fallback generic. Test/linter PASS/warnings được lọc từ Sprint 3.2;
+lockfile/inspection có ở Sprint 3.3; build và live-provider/PTY/phase acceptance vẫn thuộc sprint sau.

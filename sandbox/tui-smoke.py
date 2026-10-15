@@ -13,6 +13,7 @@ import subprocess
 import sys
 import termios
 import time
+import json
 
 root = Path(__file__).resolve().parent.parent
 installed = "--installed" in sys.argv[1:]
@@ -423,6 +424,16 @@ try:
             stage_started = now
         elif phase == "switched" and not keys and "Skill Status" in visible and "/tmp/openarms-pty-other" in visible:
             assert "docs-editor" not in visible
+            keys = [b"\x1b", b"/arms-test-domains", b"\r"]
+            next_key_at = now + 1
+            phase = "domains"
+            stage_started = now
+            print("\nSTAGE: tui-domain-workflow", flush=True)
+        elif phase == "domains" and not keys and ("Domain workflow passed" in visible or "Domain workflow failed" in visible):
+            result = subprocess.run(["docker", "exec", name, "node", "-e", "process.stdout.write(require('node:fs').readFileSync('/tmp/openarms-domain-result.json'))"], capture_output=True, text=True, check=True, timeout=10)
+            evidence = json.loads(result.stdout)
+            assert evidence.get("ok"), evidence
+            print("\nPASS: PTY real host domains " + json.dumps(evidence), flush=True)
             passed = True
             break
 except KeyboardInterrupt:
@@ -448,7 +459,7 @@ finally:
         print(f"\nCLEANUP_FAILED: {error}", file=sys.stderr)
 
 if passed:
-    print("\nPASS: synthetic library Enter/configure/Cancel/Confirm; local selection/load; automatic roots; typed usage picker; budget editor; no provider request or real skill content")
+    print("\nPASS: synthetic library Enter/configure/Cancel/Confirm; local selection/load; automatic roots; typed usage picker; budget editor; real host tools via local synthetic provider; no live provider or real skill content")
 else:
     print(f"FAIL: OpenArms picker keyboard check stalled at {phase} within 300 seconds.", file=sys.stderr)
     print(visible, file=sys.stderr)

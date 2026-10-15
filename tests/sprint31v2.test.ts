@@ -99,7 +99,7 @@ test("Sprint31v2 actual hook preserves failure metadata and saves short raw outp
     const clean = { title: "clean", output: "ok", metadata: { exitCode: 0 } }
     await governanceHooks(directory)["tool.execute.after"]({ tool: "bash", sessionID: "s", callID: "clean", args: { command: "npm test" } }, clean)
     assert.equal(clean.output, "ok"); assert.equal(clean.metadata.exitCode, 0)
-    const folder = path.join(directory, "governance")
+    const folder = path.join(directory, ".openarms/logs")
     const logs = await Promise.all((await readdir(folder)).filter(name => name.endsWith(".log")).map(name => readFile(path.join(folder, name), "utf8")))
     assert.equal(logs.length, 2); assert.ok(logs.includes("ok"))
   } finally { await rm(directory, { recursive: true, force: true }) }

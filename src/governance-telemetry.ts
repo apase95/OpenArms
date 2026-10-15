@@ -1,3 +1,25 @@
+export const telemetryDomains = ["test", "git-diff", "build", "linter", "generic"] as const
+export type CompactionMeasurement = { domain: typeof telemetryDomains[number]; rawBytes: number; compactedBytes: number; savingsRatio: number }
+export function validateCompaction(value: unknown): value is CompactionMeasurement {
+  try {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  if (Reflect.ownKeys(value).some(k => typeof k !== "string" || !["domain", "rawBytes", "compactedBytes", "savingsRatio"].includes(k) || !("value" in Object.getOwnPropertyDescriptor(value, k)!))) return false
+  const v = value as CompactionMeasurement
+  return Object.keys(v).every(k => ["domain", "rawBytes", "compactedBytes", "savingsRatio"].includes(k))
+    && telemetryDomains.includes(v.domain) && Number.isSafeInteger(v.rawBytes) && v.rawBytes >= 0
+    && Number.isSafeInteger(v.compactedBytes) && v.compactedBytes >= 0 && Number.isFinite(v.savingsRatio)
+    && v.savingsRatio === (v.rawBytes ? (v.rawBytes - v.compactedBytes) / v.rawBytes : 0)
+  } catch { return false }
+}
+export function summarizeCompaction(values: CompactionMeasurement[], unknownCalls = 0) {
+  const raw = values.reduce((n, v) => n + BigInt(v.rawBytes), 0n)
+  const compacted = values.reduce((n, v) => n + BigInt(v.compactedBytes), 0n)
+  const safe = raw <= BigInt(Number.MAX_SAFE_INTEGER) && compacted <= BigInt(Number.MAX_SAFE_INTEGER)
+  const rawBytes = safe ? Number(raw) : null, compactedBytes = safe ? Number(compacted) : null
+  return { calls: values.length, unknownCalls, rawBytes, compactedBytes,
+    savingsRatio: safe ? (rawBytes ? (rawBytes - compactedBytes!) / rawBytes : 0) : null,
+    estimatedTokensSaved: safe ? Math.max(0, (rawBytes! - compactedBytes!) / 4) : null }
+}
 export type GovernanceEvent = {
   version: 1; tool: string; sessionID: string; callID: string; messageID?: string
   rawBytes: number; contextBytes: number; estimatedTokens: number
@@ -5,16 +27,22 @@ export type GovernanceEvent = {
   logStatus: "not-needed" | "written" | "failed"
   mode: "off" | "shadow" | "active"; rule: string; decision: string
   pathID?: string
+  domain?: CompactionMeasurement["domain"]; compactedBytes?: number; savingsRatio?: number
 }
-const fields = new Set(["version", "tool", "sessionID", "callID", "messageID", "rawBytes", "contextBytes", "estimatedTokens", "truncation", "omittedBytes", "omittedLines", "logStatus", "mode", "rule", "decision", "pathID"])
+const fields = new Set(["version", "tool", "sessionID", "callID", "messageID", "rawBytes", "contextBytes", "estimatedTokens", "truncation", "omittedBytes", "omittedLines", "logStatus", "mode", "rule", "decision", "pathID", "domain", "compactedBytes", "savingsRatio"])
 export function validateTelemetry(value: unknown): value is GovernanceEvent {
+  try {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  if (Reflect.ownKeys(value).some(k => typeof k !== "string" || !fields.has(k) || !("value" in Object.getOwnPropertyDescriptor(value, k)!))) return false
   const event = value as Record<string, unknown>
   if (Object.keys(event).some(key => !fields.has(key)) || event.version !== 1) return false
   for (const key of ["tool", "sessionID", "callID", "rule", "decision"]) if (typeof event[key] !== "string" || !/^[a-zA-Z0-9_.:-]{1,160}$/.test(event[key] as string)) return false
   for (const key of ["messageID", "pathID"]) if (event[key] !== undefined && (typeof event[key] !== "string" || !/^[a-zA-Z0-9_.:-]{1,160}$/.test(event[key] as string))) return false
   for (const key of ["rawBytes", "contextBytes", "estimatedTokens", "omittedBytes", "omittedLines"]) if (!Number.isSafeInteger(event[key]) || (event[key] as number) < 0) return false
+  if (["domain", "compactedBytes", "savingsRatio"].some(k => Object.hasOwn(event, k)) && !validateCompaction({ domain: event.domain, rawBytes: event.rawBytes, compactedBytes: event.compactedBytes, savingsRatio: event.savingsRatio })) return false
+  if (event.compactedBytes !== undefined && event.compactedBytes !== event.contextBytes) return false
   return ["none", "compact", "hard-cap"].includes(event.truncation as string) && ["not-needed", "written", "failed"].includes(event.logStatus as string) && ["off", "shadow", "active"].includes(event.mode as string)
+  } catch { return false }
 }
 export function createTelemetry(sink: (event: GovernanceEvent) => Promise<void>) {
   const seen = new Set<string>()
@@ -31,7 +59,10 @@ export function aggregateTelemetry(events: GovernanceEvent[]) {
   const values = [...unique.values()]
   const rawBytes = values.reduce((sum, event) => sum + event.rawBytes, 0)
   const contextBytes = values.reduce((sum, event) => sum + event.contextBytes, 0)
-  return { calls: values.length, rawBytes, contextBytes, savingsRatio: rawBytes ? (rawBytes - contextBytes) / rawBytes : 0,
+  const measured = values.filter(event => event.domain !== undefined) as (GovernanceEvent & CompactionMeasurement)[]
+  const compaction = summarizeCompaction(measured, values.length - measured.length)
+  const domains = Object.fromEntries(telemetryDomains.map(domain => [domain, summarizeCompaction(measured.filter(e => e.domain === domain))])) as Record<CompactionMeasurement["domain"], ReturnType<typeof summarizeCompaction>>
+  return { calls: values.length, rawBytes, contextBytes, savingsRatio: rawBytes ? (rawBytes - contextBytes) / rawBytes : 0, compaction, domains,
     hardCaps: values.filter(event => event.truncation === "hard-cap").length,
     reviewSet: values.filter(event => event.decision.startsWith("SHADOW_")) }
 }

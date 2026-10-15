@@ -117,7 +117,7 @@ test("Sprint13 local SDK fixture concurrent calls, opaque exit and shadow read; 
     const events = await Promise.all((await readdir(path.join(directory, "governance"))).filter(name => name.endsWith(".json")).map(async name => JSON.parse(await readFile(path.join(directory, "governance", name), "utf8"))))
     assert.equal(events.length, 2)
     for (const event of events) { assert.equal(event.decision, "SHADOW_DENY"); assert.equal(event.mode, "shadow"); assert.equal(event.rule, "MINIFIED"); assert.equal(event.messageID, undefined) }
-    await mkdir(path.join(directory, "bad")); await writeFile(path.join(directory, "bad/governance"), "file")
+    await mkdir(path.join(directory, "bad")); await writeFile(path.join(directory, "bad/.openarms"), "file")
     const output = { title: "failed", output: "x".repeat(60000), metadata: {} }
     await governanceHooks(path.join(directory, "bad"))["tool.execute.after"]({ tool: "bash", sessionID: "s", callID: "c", args: {} }, output)
     assert.match(output.output, /LOG_WRITE_FAILED/); assert.doesNotMatch(output.output, /full log/)

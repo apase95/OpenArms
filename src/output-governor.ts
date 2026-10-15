@@ -1,4 +1,9 @@
 import { stripVTControlCharacters } from "node:util"
+import { testOutputCompactor } from "./test-output-compactor.ts"
+import { buildOutputCompactor } from "./build-output-compactor.ts"
+import { linterOutputCompactor } from "./linter-output-compactor.ts"
+import { gitDiffOutputCompactor } from "./git-diff-output-compactor.ts"
+import { compactFileInspection, isFileInspection } from "./file-inspection-compactor.ts"
 
 /** Host adapters must import this contract rather than invent shapes.
  * Required order: raw result -> full log when needed -> strip ANSI/control ->
@@ -56,7 +61,7 @@ export type OutputDomain = "test" | "git-diff" | "build" | "linter" | "generic"
 export interface DomainCompactor {
   domain: OutputDomain
   match: (command: string, rawText: string) => boolean
-  compact: (rawText: string, options: { maxBytes: number }) => Compaction
+  compact: (rawText: string, options: { maxBytes: number; command?: string }) => Compaction
 }
 
 /** No shell evaluation: only executable/verb positions, never incidental arguments.
@@ -69,7 +74,7 @@ export function classifyOutput(command: string, rawText: string): OutputDomain {
   while (/^[A-Za-z_][\w]*=/.test(tokens[i] ?? "")) i++
   if (["npx", "pnpm", "yarn", "bunx"].includes(tokens[i])) i++
   const tool = (tokens[i] ?? "").split("/").at(-1), verb = tokens[i + 1]
-  if (["pytest", "vitest", "jest"].includes(tool!) || (["npm", "go", "cargo", "bun"].includes(tool!) && verb === "test") || (tool === "npm" && verb === "run" && tokens[i + 2] === "test")) return "test"
+  if (["pytest", "vitest", "jest", "mocha"].includes(tool!) || (["npm", "go", "cargo", "bun"].includes(tool!) && verb === "test") || (tool === "npm" && verb === "run" && tokens[i + 2] === "test")) return "test"
   if (tool === "git" && (["diff", "show"].includes(verb) || (verb === "log" && tokens.slice(i + 2).some(t => t === "-p" || t === "--patch")))) return "git-diff"
   if (["tsc", "webpack", "gcc", "g++"].includes(tool!) || (["vite", "cargo"].includes(tool!) && verb === "build") || (tool === "npm" && verb === "run" && tokens[i + 2] === "build")) return "build"
   if (["eslint", "flake8", "golangci-lint"].includes(tool!) || (tool === "biome" && verb === "check")) return "linter"
@@ -91,7 +96,7 @@ export function normalizeOutput(raw: string) {
  * This detects noise, not a promise to remove it (parsers land in later sprints).
  */
 export function hasOutputNoise(text: string) {
-  return /\b(?:warn(?:ing)?s?|errors?|failed|failure|PASS|FAIL)\b|[✓✔]|\b\d+%|\[[=># .-]{3,}\]|^TAP version\b/im.test(text)
+  return /\b(?:warn(?:ing)?s?|errors?|failed|failure|passing|failing|PASS|FAIL)\b|[✓✔❯×]|\b\d+%|\[[=># .-]{3,}\]|^(?:TAP version\b|ok\s+\S+\s+[\d.]+s|.+:\d+:\d+: [EFW]\d{3})/im.test(text)
 }
 export function compactOutput(raw: string, limit = 32000): Compaction {
   if (!Number.isSafeInteger(limit) || limit < 256) throw Error("Invalid compaction limit")
@@ -111,13 +116,18 @@ export async function governOutput(raw: string, options: {
   save: (raw: string) => Promise<string>
   compact?: (raw: string) => Compaction
   authoritative?: boolean
+  /** Host sink requirement, including byte-for-byte short authoritative output. */
+  persistRaw?: boolean
   command?: string
+  toolName?: string
+  path?: string
   compactors?: readonly DomainCompactor[]
 }) {
   let logPath: string | undefined, logStatus = "not-needed", warning = ""
   // Save before invoking any transform, including custom parsers.
-  const domainAware = !options.authoritative && (options.command !== undefined || options.compactors !== undefined)
-  if (domainAware || bytes(raw) > (options.authoritative ? HARD_CAP : 32000) || options.compact) {
+  const inspection = !options.authoritative && isFileInspection(options.toolName, options.command)
+  const domainAware = !options.authoritative && (inspection || options.command !== undefined || options.compactors !== undefined)
+    if (options.persistRaw || domainAware || bytes(raw) > (options.authoritative ? HARD_CAP : 32000) || options.compact) {
     try { logPath = await options.save(raw); logStatus = "written" }
     catch { logStatus = "failed"; warning = "[OPENARMS: LOG_WRITE_FAILED]\n" }
   }
@@ -127,23 +137,33 @@ export async function governOutput(raw: string, options: {
     if (options.authoritative) result = { text: raw, omittedBytes: 0, omittedLines: 0 }
     else if (options.compact) result = options.compact(raw) // Legacy callback receives unchanged raw input.
     else if (domainAware) {
+      // NUL/binary evidence must be inspected before normalizer strips controls.
+      const inspected = inspection ? compactFileInspection(raw, options.path) : undefined
       const normalized = normalizeOutput(raw).replaceAll("[OPENARMS:", "[TOOL-DAT:")
       domain = classifyOutput(options.command ?? "", normalized)
-      fastPath = bytes(normalized) < 1000 && !hasOutputNoise(normalized)
-      const parser = fastPath ? undefined : options.compactors?.find(parser => parser.domain === domain && parser.match(options.command ?? "", normalized))
-      result = parser ? parser.compact(normalized, { maxBytes: 32000 }) : compactOutput(normalized)
+      fastPath = !inspected && bytes(normalized) < 1000 && !hasOutputNoise(normalized)
+      // Explicit injection replaces defaults, including [] to request generic only.
+       const parser = fastPath || inspected ? undefined : (options.compactors ?? [testOutputCompactor, linterOutputCompactor, gitDiffOutputCompactor, buildOutputCompactor]).find(parser => parser.domain === domain && parser.match(options.command ?? "", normalized))
+       result = inspected ?? (parser ? parser.compact(normalized, { maxBytes: 32000, command: options.command }) : compactOutput(normalized))
       // Untrusted/injected parsers cannot mint reserved governor metadata.
       if (parser) result = { ...result, text: normalizeOutput(result.text).replaceAll("[OPENARMS:", "[TOOL-DAT:") }
-    } else result = compactOutput(raw)
+     } else result = compactOutput(raw)
+     // Snapshot untrusted callbacks/getters inside the guarded boundary. Downstream
+     // metadata and cap enforcement must see only a validated plain record.
+     const { text, omittedBytes, omittedLines } = result
+     if (typeof text !== "string" || !Number.isSafeInteger(omittedBytes) || omittedBytes < 0
+       || !Number.isSafeInteger(omittedLines) || omittedLines < 0) throw Error("Invalid compaction")
+     result = { text, omittedBytes, omittedLines }
   }
   catch {
-    result = domainAware ? compactOutput(raw) : { text: raw, omittedBytes: 0, omittedLines: 0 }
+     result = domainAware ? compactOutput(raw) : { text: raw, omittedBytes: 0, omittedLines: 0 }
     warning += "[OPENARMS: GOVERNOR_FAILED]\n"
   }
   // Persist every domain-aware stream, but keep clean short responses byte-for-byte.
   // Transformed output/warnings retain provenance; logPath is always returned.
   const unchangedFastPath = fastPath && !warning && result.text === raw && result.omittedBytes === 0 && result.omittedLines === 0
-  const reference = logPath && !unchangedFastPath ? `[OPENARMS: full log ${sliceBytes(normalizeOutput(logPath).replaceAll("[OPENARMS:", "[TOOL-DAT:").replace(/[\n\]]/g, "_"), 1024)}]\n` : ""
+   const unchangedAuthoritative = options.authoritative && !warning && bytes(raw) <= HARD_CAP
+   const reference = logPath && !unchangedFastPath && !unchangedAuthoritative ? `[OPENARMS: full log ${sliceBytes(normalizeOutput(logPath).replaceAll("[OPENARMS:", "[TOOL-DAT:").replace(/[\n\]]/g, "_"), 1024)}]\n` : ""
   let text = warning + reference + result.text
   const hardCapApplied = bytes(text) > HARD_CAP
   if (hardCapApplied) {

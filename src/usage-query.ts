@@ -26,6 +26,10 @@ const scopes: Record<string, string> = { today: "Today", day: "Day", session: "S
 const row = (name: string, value: string) => `${name.normalize("NFC")}${" ".repeat(Math.max(0, 26 - [...name.normalize("NFC")].length))} : ${value}`
 const number = (value: number) => new Intl.NumberFormat("en-US", { maximumSignificantDigits: 15 }).format(value)
 const amount = (metric: string, value: number) => metric === "contextUtilization" ? `${number(value * 100)}%` : `${number(value)}${metric === "costUSD" ? " USD" : metric.endsWith("Bytes") ? " bytes" : metric === "truncationCount" ? " times" : " tokens"}`
+function compactionLine(report?: ReturnType<typeof summarizeUsage>) {
+  const c = report?.compaction
+  return row("Compactor savings", !c?.calls || c.estimatedTokensSaved === null ? "Unknown (no reliable domain measurements)" : `${number(c.estimatedTokensSaved)} tokens (estimated bytes/4; net, including output overhead${c.unknownCalls ? "; partial: legacy calls unknown" : ""})`)
+}
 export function formatUsage(result: Awaited<ReturnType<typeof queryUsage>>) {
   const lines = [row("Scope", scopes[result.scope]), row("Policy", result.policyVersion), row("Timezone", result.timezone)]
   if (result.scope === "model" && result.id) lines.push(row("Model", result.id))
@@ -37,6 +41,7 @@ export function formatUsage(result: Awaited<ReturnType<typeof queryUsage>>) {
     const markers = [v.status === "partial" ? "partial" : "", v.estimated || v.status === "estimated" ? "estimated" : ""].filter(Boolean)
     lines.push(row(labels[metric], v.value === null || v.status === "missing" ? "No data" : amount(metric, v.value) + (markers.length ? ` (${markers.join("; ")})` : "")))
   }
+  lines.push(compactionLine(result.report))
   lines.push(row("Recorded messages", number(result.report.turns)), "Estimated: approximate; partial: some data is missing.")
   for (const c of result.report.contributors) lines.push(`Tool ${c.tool}`, row("  Raw output", c.rawBytes === null ? "No data" : amount("rawToolOutputBytes", c.rawBytes)), row("  Context output", c.contextBytes === null ? "No data" : amount("toolOutputBytes", c.contextBytes)))
   lines.push("Skill contribution: correlation only.", "Skill tokens are estimates when available.")
@@ -58,6 +63,7 @@ export async function executeUsageCommand(command: string, store: UsageStore, po
       if (scope === "session" && context.session === "__skill_router_home__") { lines.push("No active session."); continue }
       const result = await queryUsage(store, policy, { ...context, scope, id: scope === "session" ? context.session : undefined })
       const limits = policy.scopes[scope === "today" ? "day" : "session"]
+      lines.push(compactionLine(result.report))
       if (result.status === "corrupt") lines.push("Corrupt data; no reliable total available.")
       for (const metric of new Set([...Object.keys(limits), "costUSD", "output", "contextUtilization"])) {
         const sample = result.report?.metrics[metric as keyof typeof result.report.metrics], limit = limits[metric as keyof typeof limits]?.limit
@@ -67,6 +73,8 @@ export async function executeUsageCommand(command: string, store: UsageStore, po
         lines.push(row(labels[metric], `${used} / ${limit === undefined ? "No limit set" : amount(metric, limit)} / ${balance}`))
       }
     }
+    const lifetime = await queryUsage(store, policy, { ...context, scope: "project" })
+    lines.push("Project lifetime (retained local records)", compactionLine(lifetime.report))
     return lines.join("\n")
   }
   if (parts[0] !== "usage" || !["today", "session", "project", "model"].includes(parts[1]) || parts.length > 3) return "Usage: /usage today|session [id]|project|model <id>; /budget (read-only)"

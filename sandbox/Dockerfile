@@ -19,7 +19,7 @@ CMD ["node", "--experimental-strip-types", "--test", "tests/core.test.ts", "test
 
 FROM dependencies AS runtime
 ARG OPENCODE_VERSION=1.18.35
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates g++ \
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global "opencode-ai@${OPENCODE_VERSION}" --no-audit --no-fund \
     && test "$(opencode --version)" = "${OPENCODE_VERSION}"
@@ -43,6 +43,7 @@ ENV HOME=/home/node \
     XDG_DATA_HOME=/home/node/.local/share \
     XDG_CACHE_HOME=/home/node/.cache \
     BUN_INSTALL_CACHE_DIR=/home/node/.cache/bun \
+    npm_config_cache=/home/node/.cache/npm \
     OPENCODE_DISABLE_AUTOUPDATE=true
 USER node
 WORKDIR /workspace/project
