@@ -1,0 +1,6 @@
+skills/
+node_modules/
+.git/
+.openarms/
+graphify-out/
+sandbox/local/

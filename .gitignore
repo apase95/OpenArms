@@ -10,3 +10,6 @@ state.json
 *.db
 *.db-shm
 *.db-wal
+sandbox/local/
+graphify-out/
+.opencode/

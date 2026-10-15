@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "packages": {
+    "sample": { "core": ["example"], "optional": [], "detect": { "files": [], "extensions": [], "dependencies": [] } }
+  },
+  "skills": {
+    "example": {
+      "owner": "sample", "kind": "core", "path": "example/data.txt",
+      "contentHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "maxTokens": 100, "defaultPermission": "ask", "workflows": {}, "references": {}
+    }
+  }
+}

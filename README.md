@@ -12,7 +12,7 @@ Docker Compose and Python/PTY when required. CI distrusts local smoke stamps;
 missing capability blocks validation. No hook is installed automatically.
 See [commands](docs/testing/testing.md) and [Sprint 0.4](docs/testing/how_to_test/Sprint_04.md).
 
-OpenArms is a local verified-skill router and runtime-governance layer for
+OpenArms is a local skill router and runtime-governance layer for
 [OpenCode](https://github.com/anomalyco/opencode). It keeps skill content out of
 the model context until a task needs it, stores selection per project/session,
 and prevents unregistered skill files from bypassing the registry.
@@ -20,16 +20,24 @@ and prevents unregistered skill files from bypassing the registry.
 ## Current Scope
 
 - Intercepts `/skills` in the OpenCode TUI.
-- Detects relevant packages from project files and dependencies.
-- Loads only enabled packages through `load_skill_package`.
-- Restricts skill paths to a registry-controlled local library.
-- Uses atomic state updates and a per-task package lock.
+- Uses exactly one explicitly chosen library per canonical project; new projects start **Not configured**.
+- Choose the folder containing `registry.json` and `skills/` from `/skills` → Status. Libraries are never merged or implicitly selected from the environment.
+- Registers only `load_skill({skill})`, accepting exact selected skill IDs, not paths or package-wide requests.
+- Supports local v1/v2 registry metadata without mandatory migration, hash approval or Grant/Revoke actions.
+- Persists library configuration, selection and bounded load history using cooperative state transactions; safe containment protects content reads.
 - Bundles only skills with an explicit license. Each bundled skill retains its
   own license file.
 
-OpenArms v2 will expand this foundation with usage telemetry, compact test
-output, per-skill verified loading, budget warnings, and session lifecycle
-controls. Enforcement remains opt-in until telemetry is reliable.
+Use selects metadata; Ask for an exact selected ID to load it for a task.
+Status distinguishes **Selected**, **Loaded** and **Missing**, with library errors
+when the folder is unset or unavailable. Changing the library defaults to Cancel;
+confirming clears prior source state for that project. Start `/new` afterward:
+already loaded model context cannot be retracted. Restore defaults to No and
+restores selection only within the same library, never grants.
+See the [single-library guide](docs/testing/how_to_test/Single_Library.md).
+Sprint 2.3/2.4 guides retain historical verified-loader evidence, not required
+current setup. Final redesign full/smoke verification and real-host acceptance
+remain pending; this documentation does not claim a live skill load.
 
 ## Development
 
@@ -81,12 +89,14 @@ repository.
 
 Platform-independent core modules live in `src/`. The two entry points in
 `plugins/` adapt OpenCode hooks and TUI events to that core. Both adapters use
-`src/runtime.ts` to initialize the same registry, state paths, and package loader.
-The previous core import paths remain available as compatibility facades.
+the local-library runtime to initialize project configuration, registry metadata
+and state paths. `src/local-library.ts` implements explicit root selection and
+contained per-skill reads; `src/skills-service.ts` handles local skill commands.
+`load_skill` is the sole server skill-content tool.
 
 See the [`docs` index](docs/README.md) for the user guide, runtime flow, state
-model, security boundaries, onboarding, and architecture. The registry in this
-checkout currently contains the `docs` package.
+model, security boundaries, onboarding, and architecture. Package availability
+comes only from the library you choose.
 
 ## Sandbox
 
@@ -110,8 +120,11 @@ smoke command to rerun with a matching image; `-- --rebuild` also forces a build
 Runner-managed smoke uses temporary isolated volumes and cleans them after each
 run. See [smoke contracts and cache](docs/testing/smoke-contract.md).
 
-Add `--installed` to `start` or unified smoke commands to use the locally installed router's
+Add `--installed` to `start` or unified smoke commands to expose the locally installed router's
 registry and skill library read-only, with a separate set of sandbox volumes.
+Then explicitly choose `/opt/installed-router` in Status; repository sandbox
+users can choose `/opt/openarms`, or a valid project library folder. A host path
+is not reachable inside the container unless mounted. Mounting is not selection.
 See [`sandbox/README.md`](sandbox/README.md) for authentication, fixtures, and reset.
 
 The source repository intentionally excludes OpenCode runtime data, auth files,
