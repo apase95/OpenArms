@@ -7,9 +7,29 @@
   "repository": "github:apase95/OpenArms",
   "type": "module",
   "dependencies": {
-    "@opencode-ai/plugin": "1.18.34"
+    "@opencode-ai/plugin": "1.18.34",
+    "yaml": "2.9.1"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/server.test.ts"
+    "test": "node scripts/arms-test.mjs verify",
+    "test:plan": "node scripts/arms-test.mjs verify --plan",
+    "test:syntax": "node scripts/arms-test.mjs syntax",
+    "test:related": "node scripts/arms-test.mjs related",
+    "test:full": "node scripts/arms-test.mjs full",
+    "test:smoke": "node scripts/arms-test.mjs smoke",
+    "test:smoke-static": "node scripts/arms-test.mjs smoke-static",
+    "test:smoke-runtime": "node scripts/arms-test.mjs smoke-runtime",
+    "test:tui-smoke": "node scripts/arms-test.mjs tui-smoke",
+    "test:baseline": "node scripts/arms-test.mjs baseline",
+    "test:report": "node scripts/arms-test.mjs report",
+    "test:pre-push": "node scripts/arms-test.mjs verify --pre-push",
+    "test:acceptance": "node scripts/phase0-report.mjs",
+    "test:policy": "node scripts/check-test-policy.mjs",
+    "test:raw": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
+    "sandbox": "node sandbox/manage.mjs"
+  },
+  "devDependencies": {
+    "picomatch": "4.0.7",
+    "typescript": "5.9.3"
   }
 }

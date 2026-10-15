@@ -1,53 +1,59 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
-import { homedir } from "node:os"
+import { createLocalRuntime } from "../src/local-library.ts"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
-import { buildRouterInstruction, createPackageLoader } from "./server-core.ts"
-import { loadRegistry, resolveProjectRoot, StateStore } from "./shared.ts"
-
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
-const stateFile = path.join(homedir(), ".local", "state", "openarms", "state.json")
-const homeSession = "__skill_router_home__"
+import { governanceHooks } from "../src/governance-hooks.ts"
+import { createUsageRuntime, completedMessageUsage } from "../src/usage-runtime.ts"
 
 export const SkillRouterServer = (async ({ worktree, directory }) => {
-  const projectRoot = resolveProjectRoot(worktree, directory)
-  const registry = await loadRegistry(path.join(root, "registry.json"))
-  const store = await StateStore.open(stateFile)
-  await store.reconcileRegistry(projectRoot, registry)
-  const loadPackage = createPackageLoader({ registry, store, libraryRoot: root, projectRoot })
+  const runtime = await createLocalRuntime({ worktree, directory })
+  const { projectRoot, store, loadSkill, buildInstruction, stateFile } = runtime
+  const usage = createUsageRuntime(path.dirname(stateFile), projectRoot)
 
   return {
+    ...governanceHooks(path.dirname(stateFile), projectRoot),
+    "chat.params": async () => { await usage.evaluate() },
     event: async ({ event }) => {
+      if (event.type === "message.updated") {
+        const record = completedMessageUsage(event.properties.info)
+        if (record) await usage.capture(record)
+        return
+      }
       if (event.type !== "session.created") return
       const info = event.properties.info
-      if (await store.migrateLegacySession(projectRoot, info.id)) return
-      if (info.parentID) await store.inheritSession(projectRoot, info.parentID, info.id)
-      else if (await store.getSession(projectRoot, homeSession)) await store.inheritSession(projectRoot, homeSession, info.id)
-      else await store.startSession(projectRoot, info.id)
+      const library = await runtime.getLibrary()
+      if (library.root) {
+        await runtime.initializeLocalSession(info.id, library.revision, false, info.parentID)
+      } else if (!library.root) await store.startSession(projectRoot, info.id)
     },
-    "chat.message": async ({ sessionID }) => {
-      await store.migrateLegacySession(projectRoot, sessionID)
-      await store.resetTaskLock(projectRoot, sessionID)
+    "chat.message": async ({ sessionID }, output) => {
+      // Root initialization and Home draft consumption share the revision-checked
+      // transaction with the TUI; neither event ordering can publish empty first.
+      if (!(await runtime.getLibrary()).root) await store.resetTaskLock(projectRoot, sessionID, output.message.id)
     },
     "experimental.chat.system.transform": async ({ sessionID }, output) => {
       if (!sessionID) return
-      await store.migrateLegacySession(projectRoot, sessionID)
-      const instruction = buildRouterInstruction(await store.getSession(projectRoot, sessionID))
+      const instruction = await buildInstruction(sessionID)
       if (instruction) output.system.push(instruction)
     },
     tool: {
-      load_skill_package: tool({
-        description: "The only authorized way to access skills. Load one enabled package and all selected skills for the current task. Use the package name shown to the left of the skill in the OpenArms system instruction; for example, load package 'docs' when the user asks for its selected 'archify' skill. Never search the filesystem, config, PATH, or web for skills.",
+      openarms_usage: tool({
+        description: "Read-only usage and budget report. Missing usage is unknown, not zero; no enforcement or raw content.",
+        args: { command: tool.schema.string().describe("usage today|session [id]|project|model <id>, or budget") },
+        execute: async ({ command }, context) => usage.command(command, context.sessionID),
+      }),
+      load_skill: tool({
+        description: "Load one exact selected skill ID from the project's explicitly configured local library. No arbitrary paths, grants or fallback sources. Never acquire skill content through filesystem/web/subagents.",
         args: {
-          package: tool.schema.string().describe("Enabled package name from OpenArms, not an optional skill name"),
-          workflow: tool.schema.string().optional().describe("Optional Superpower workflow name"),
+          skill: tool.schema.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).describe("Enabled skill ID, not package name"),
         },
-        execute: async (args, context) => loadPackage({
-          sessionID: context.sessionID,
-          packageName: args.package,
-          workflow: args.workflow,
-        }),
+        execute: async (args, context) => {
+          try {
+            if (Object.keys(args).some(key => key !== "skill")) return JSON.stringify({ ok: false, error: { code: "INVALID_REQUEST" } })
+            return JSON.stringify(await loadSkill(context.sessionID, args.skill))
+          }
+          catch { return JSON.stringify({ ok: false, error: { code: "RUNTIME_ERROR" } }) }
+        },
       }),
     },
   }

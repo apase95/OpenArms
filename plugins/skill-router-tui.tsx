@@ -1,15 +1,14 @@
 /** @jsxImportSource @opentui/solid */
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
-import { homedir } from "node:os"
+import { detectPackages } from "../src/project.ts"
+import { orderedPackageNames, packageLabel, parseCommand } from "../src/commands.ts"
+import { executeLocalSkillsCommand } from "../src/skills-service.ts"
+import { createLocalRuntime } from "../src/local-library.ts"
+import { HOME_SESSION as homeSession } from "../src/state-store.ts"
+import { chooseVerifiedConfirmation, confirmationKey, sessionAction, interceptLocalPrompt, registerLocalSubmit, watchUsagePrompt } from "./tui-core.ts"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
-import { detectPackages, loadRegistry, orderedPackageNames, packageLabel, parseCommand, resolveProjectRoot, StateStore } from "./shared.ts"
-import { executeSkillsCommand, handleSkillsPrompt, initializeSession } from "./tui-core.ts"
-
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
-const stateFile = path.join(homedir(), ".local", "state", "openarms", "state.json")
-const homeSession = "__skill_router_home__"
+import { createUsageRuntime, type BudgetEditAction } from "../src/usage-runtime.ts"
 
 type PickerOption = {
   title: string
@@ -81,7 +80,7 @@ function CustomDialog(props: CustomDialogProps) {
       props.api.ui.toast({
         variant: "error",
         title: "Skill Router Error",
-        message: error?.message ?? "The skill action failed",
+        message: "SKILL_ACTION_FAILED",
         duration: 10000,
       })
     } finally {
@@ -111,18 +110,22 @@ function CustomDialog(props: CustomDialogProps) {
     }
     if (event.name === "up") {
       event.preventDefault()
+      event.stopPropagation()
       move(-1)
     }
     if (event.name === "down") {
       event.preventDefault()
+      event.stopPropagation()
       move(1)
     }
     if (event.name === "left") {
       event.preventDefault()
+      event.stopPropagation()
       moveToAction(back ?? done)
     }
     if (event.name === "right") {
       event.preventDefault()
+      event.stopPropagation()
       moveToAction(done ?? back)
     }
   })
@@ -137,7 +140,6 @@ function CustomDialog(props: CustomDialogProps) {
         justifyContent={kind === "back" ? "flex-start" : "flex-end"}
         onMouseOver={() => {
           setHoveredAction(kind)
-          moveToAction(option)
         }}
         onMouseOut={() => setHoveredAction(undefined)}
         onMouseUp={() => void activate(option)}
@@ -190,7 +192,6 @@ function CustomDialog(props: CustomDialogProps) {
                   backgroundColor={active() ? selectionColor(option) : theme.backgroundPanel}
                   onMouseOver={() => {
                     setHoveredAction(undefined)
-                    if (!busy()) setSelected(absoluteIndex())
                   }}
                   onMouseUp={() => void activate(option)}
                 >
@@ -236,11 +237,91 @@ function CustomDialog(props: CustomDialogProps) {
   )
 }
 
+function LibraryPathDialog(props: { api: any; initial: string; onCancel: () => void; onSubmit: (root: string) => Promise<void> }) {
+  const theme = props.api.theme.current
+  const [value, setValue] = createSignal(props.initial)
+  const [busy, setBusy] = createSignal(false)
+  const [error, setError] = createSignal("")
+  useKeyboard(event => {
+    if (event.name === "escape" && !busy()) {
+      event.preventDefault()
+      event.stopPropagation()
+      props.onCancel()
+    }
+  })
+  const submit = async () => {
+    if (busy()) return
+    setBusy(true)
+    try { await props.onSubmit(value().trim()) }
+    catch { setError("Library unavailable or changed. Choose an absolute root containing registry.json and skills/.") }
+    finally { setBusy(false) }
+  }
+  return <box flexDirection="column" padding={1} gap={1}>
+    <box flexDirection="column" gap={1}>
+    <text>Set library path</text>
+    <input focused focusedBackgroundColor={theme.primary} focusedTextColor={theme.selectedListItemText} value={value()} disabled={busy()} placeholder="Absolute library root" onInput={setValue} onSubmit={() => void submit()} />
+    <Show when={error()}><text>{error()}</text></Show>
+    <text onMouseUp={() => !busy() && props.onCancel()}>Cancel (Esc)</text>
+    </box>
+  </box>
+}
+
+function ConfirmationDialog(props: any) {
+  const [selected, setSelected] = createSignal(false)
+  const theme = props.api.theme.current
+  useKeyboard(event => {
+    const next = confirmationKey(event.name, selected())
+    // Consume ordinary typing too: it must not filter options or edit the prompt.
+    event.preventDefault()
+    event.stopPropagation()
+    setSelected(next.selected)
+    if (next.accepted !== undefined) props.onConfirm(next.accepted)
+  })
+   return <box flexDirection="column" padding={1}>
+    <box flexDirection="column" gap={1}>
+     <text fg={theme.text}><b>{props.title}</b></text>
+     <text wrapMode="word" fg={theme.text}>{props.message}</text>
+     <box flexDirection="column" gap={0}>
+     <For each={[false, true]}>{value => <box height={1} flexShrink={0} paddingLeft={1} paddingRight={1}
+      backgroundColor={selected() === value ? theme.primary : theme.backgroundPanel}
+      onMouseUp={() => props.onConfirm(value)}>
+       <text height={1} wrapMode="none" overflow="hidden" fg={selected() === value ? theme.selectedListItemText : theme.text}>{value ? props.yes : props.no}</text>
+    </box>}</For>
+    </box>
+    </box>
+  </box>
+}
+
+function BudgetInputDialog(props: { title: string; onCancel: () => void; onSubmit: (value: string) => Promise<void> }) {
+  const [value, setValue] = createSignal("")
+  const [error, setError] = createSignal("")
+  const [busy, setBusy] = createSignal(false)
+  useKeyboard(event => {
+    if (event.name !== "escape" || busy()) return
+    event.preventDefault(); event.stopPropagation(); props.onCancel()
+  })
+  const submit = async () => {
+    if (busy()) return
+    setBusy(true)
+    try { await props.onSubmit(value()) }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+  return <box flexDirection="column" padding={1} gap={1}>
+    <text>{props.title}</text>
+    <input focused disabled={busy()} value={value()} onInput={setValue} onSubmit={() => void submit()} />
+    <Show when={error()}><text>{error()}</text></Show>
+    <text onMouseUp={() => !busy() && props.onCancel()}>Cancel (Esc)</text>
+  </box>
+}
+
 type ReadOnlyDialogProps = {
   api: any
   title: string
   message: string
   onBack: () => void | Promise<void>
+  onEdit?: () => void | Promise<void>
+  libraryFirst?: boolean
 }
 
 function ReadOnlyDialog(props: ReadOnlyDialogProps) {
@@ -282,7 +363,7 @@ function ReadOnlyDialog(props: ReadOnlyDialogProps) {
       props.api.ui.toast({
         variant: "error",
         title: "Skill Router Error",
-        message: error?.message ?? "Could not return to skill options",
+        message: "SKILL_ACTION_FAILED",
         duration: 10000,
       })
     } finally {
@@ -291,6 +372,12 @@ function ReadOnlyDialog(props: ReadOnlyDialogProps) {
   }
 
   useKeyboard((event) => {
+    if (props.onEdit && event.name === "e") {
+      event.preventDefault()
+      event.stopPropagation()
+      void props.onEdit()
+      return
+    }
     if (event.name === "escape") {
       event.preventDefault()
       event.stopPropagation()
@@ -335,6 +422,9 @@ function ReadOnlyDialog(props: ReadOnlyDialogProps) {
         <text fg={theme.text}><b>{props.title}</b></text>
         <text fg={theme.textMuted} onMouseUp={() => void goBack()}>esc</text>
       </box>
+      <Show when={props.onEdit && props.libraryFirst}>
+        <text fg={theme.primary} onMouseUp={() => props.onEdit?.()}>{props.title === "Budget" ? "Edit project budget (e)" : "Set / edit library path (e)"}</text>
+      </Show>
       <box flexDirection="column">
         <For each={lines.slice(offset(), offset() + viewportSize)}>
           {(line, index) => {
@@ -358,10 +448,10 @@ function ReadOnlyDialog(props: ReadOnlyDialogProps) {
                 </box>
               )
             }
-            if (inspect && text.startsWith("# ")) {
+            if ((inspect || status || skillList) && text.startsWith("# ")) {
               return <text fg={theme.secondary}><b>{text.slice(2)}</b></text>
             }
-            if (inspect && line.includes("\t")) {
+            if ((inspect || status || skillList) && line.includes("\t")) {
               const [skill, state = ""] = line.split("\t")
               return (
                 <box flexDirection="row" paddingLeft={1} paddingRight={1} width="100%">
@@ -416,6 +506,9 @@ function ReadOnlyDialog(props: ReadOnlyDialogProps) {
           }}
         </For>
       </box>
+      <Show when={props.onEdit && !props.libraryFirst}>
+        <text fg={theme.primary} onMouseUp={() => props.onEdit?.()}>{props.title === "Budget" ? "Edit project budget (e)" : "Set / edit library path (e)"}</text>
+      </Show>
       <box flexDirection="row" justifyContent="flex-start">
         <box
           paddingLeft={1}
@@ -436,10 +529,21 @@ export default {
     let activePrompt: any
     let activeSessionID = homeSession
     let disposeSubmit = () => {}
-    const registry = await loadRegistry(path.join(root, "registry.json"))
-    const store = await StateStore.open(stateFile)
-    const projectRoot = resolveProjectRoot(api.state.path.worktree, api.state.path.directory)
-    await store.reconcileRegistry(projectRoot, registry)
+    const runtime = await createLocalRuntime({
+      worktree: api.state.path.worktree,
+      directory: api.state.path.directory,
+    })
+    const { store, projectRoot, stateFile } = runtime
+    let registry = { version: 1, packages: {}, skills: {} } as Awaited<ReturnType<typeof runtime.refreshLibrary>>["registry"]
+    const refreshRegistry = async () => {
+      detectedSnapshot = undefined
+      try { registry = (await runtime.refreshLibrary()).registry; return true }
+      catch { registry = { version: 1, packages: {}, skills: {} } as typeof registry; return false }
+    }
+    const usage = createUsageRuntime(path.dirname(stateFile), projectRoot)
+    // A persisted home draft is history, not a fresh explicit home action.
+    const initialLibrary = await runtime.getLibrary()
+    if (initialLibrary.root) await runtime.initializeLocalSession(homeSession, initialLibrary.revision, false, undefined, true).catch(() => {})
     const initializing = new Map<string, Promise<unknown>>()
     let detectedSnapshot: Set<string> | undefined
     let detectedAt = 0
@@ -458,54 +562,23 @@ export default {
       detecting = pending
       return pending
     }
-    void refreshDetection()
 
-    const choose = (title: string, message: string, yes: string, no: string) => new Promise<boolean>((resolve) => {
-      api.ui.dialog.replace(
-        () => api.ui.DialogSelect({
-          title: `${title}\n${message}`,
-          options: [
-            { title: no, value: false },
-            { title: yes, value: true },
-          ],
-          onSelect(option: any) {
-            resolve(option.value)
-          },
-        }),
-        () => resolve(false),
-      )
-    })
+    const choose = (title: string, message: string, yes: string, no: string) => chooseVerifiedConfirmation(api, title, message, yes, no,
+      props => <ConfirmationDialog api={api} {...props} />)
 
-    const ensureSession = (sessionID: string) => {
+     const ensureSession = (sessionID: string, resetHome = false) => {
       const current = initializing.get(sessionID)
       if (current) return current
       const pending = (async () => {
-        await store.migrateLegacySession(projectRoot, sessionID)
-        if (await store.getSession(projectRoot, sessionID)) return
-        if (sessionID === homeSession) {
-          await initializeSession({
-            projectRoot,
-            sessionID,
-            store,
-            confirmRestore: (message) => choose("Restore skills", message, "Yes", "No"),
-          })
-          return
-        }
+        if (!await refreshRegistry()) return
+        const config = await runtime.getLibrary()
+        if (!config.root) return
         const parentID = api.state.session.get(sessionID)?.parentID
         if (parentID) {
-          await initializeSession({ projectRoot, sessionID, parentID, store, confirmRestore: async () => false })
+          await runtime.initializeLocalSession(sessionID, config.revision, false, parentID)
           return
         }
-        if (await store.getSession(projectRoot, homeSession)) {
-          await store.inheritSession(projectRoot, homeSession, sessionID)
-          return
-        }
-        await initializeSession({
-          projectRoot,
-          sessionID,
-          store,
-          confirmRestore: (message) => choose("Restore skills", message, "Yes", "No"),
-        })
+         await runtime.initializeLocalSession(sessionID, config.revision, false, undefined, resetHome && sessionID === homeSession)
       })()
       initializing.set(sessionID, pending)
       void pending.finally(() => {
@@ -526,13 +599,35 @@ export default {
     })
 
     function openReadOnly(title: string, message: string, onBack: () => void | Promise<void>) {
-      api.ui.dialog.replace(() => <ReadOnlyDialog api={api} title={title} message={message} onBack={onBack} />)
+      api.ui.dialog.replace(() => <ReadOnlyDialog api={api} title={title} message={message} onBack={onBack}
+        onEdit={title === "Skill Status" ? openLibraryEditor : title === "Budget" ? () => openBudgetMenu(activeSessionID) : undefined} libraryFirst={!message.includes("\t")} />)
       api.ui.dialog.setSize("medium")
     }
 
-    const run = async (args: string, sessionID = activeSessionID, onReadOnlyBack?: () => void | Promise<void>) => {
+    async function openLibraryEditor() {
+      const config = await runtime.getLibrary()
+      api.ui.dialog.replace(() => <LibraryPathDialog api={api} initial={config.root ?? ""} onCancel={() => void run("status")}
+        onSubmit={async root => {
+           const allowed = await choose("Change library path?", "Clears skill selections, load history and task locks in this workspace. Start /new after changing.", "Confirm", "Cancel")
+          if (allowed) {
+            try {
+              await runtime.configureLibrary(root, config.revision, true)
+              await refreshRegistry()
+              toast("Library changed", "Re-select skills. Recommended: open /new.", "success")
+            } catch {
+              toast("Library not changed", "Invalid or changed library. Choose an absolute root containing registry.json and skills/.", "error")
+            }
+          }
+          await run("status")
+        }} />)
+      api.ui.dialog.setSize("medium")
+    }
+
+    const run = async (args: string, sessionID = activeSessionID, onReadOnlyBack?: () => void | Promise<void>, pickerRevision?: string) => {
       try {
         await ensureSession(sessionID)
+        const expectedRevision = pickerRevision ?? (await runtime.getLibrary()).revision
+        if ((await runtime.getLibrary()).revision !== expectedRevision) throw new Error("LIBRARY_CHANGED")
         const command = parseCommand(args)
         const session = await store.getSession(projectRoot, sessionID)
         if (command.action === "clear" && Object.keys(session?.packages ?? {}).length > 0) {
@@ -563,17 +658,7 @@ export default {
             }
           }
         }
-        const message = await executeSkillsCommand({
-          args,
-          projectRoot,
-          sessionID,
-          registry,
-          store,
-          detected: ["use", "packages"].includes(command.action)
-            ? await refreshDetection(command.action === "packages")
-            : new Set(),
-          confirmMismatch: (title, text) => choose(title, text, "Allow", "Cancel"),
-        })
+        const message = await executeLocalSkillsCommand(runtime, sessionID, args, expectedRevision)
         const titles: Record<string, string> = {
           status: "Skill Status",
           packages: "Skill Packages",
@@ -594,7 +679,11 @@ export default {
         }
         toast(unchanged ? "No Changes" : titles[command.action], message, unchanged ? "warning" : readOnly ? "info" : "success")
       } catch (error: any) {
-        toast("Skill Router Error", error?.message ?? "The skills command failed", "error")
+        const message = error.message === "NOT_CONFIGURED" ? "Set a library path in /skills status."
+          : error.message === "LIBRARY_CHANGED" ? "Library changed. Re-open the picker and re-select skills."
+          : error.message === "INVALID_LIBRARY" ? "Library unavailable. Edit the path in /skills status."
+          : "Invalid skills command or unavailable state. Open /skills help for syntax."
+        toast("Skill Router Error", message, "error")
       }
     }
 
@@ -616,7 +705,8 @@ export default {
       api.ui.dialog.setSize("medium")
     }
 
-    const openSkillPicker = async (action: "use" | "add" | "remove", packageName: string, sessionID: string) => {
+    const openSkillPicker = async (action: "use" | "add" | "remove", packageName: string, sessionID: string, revision: string) => {
+      if ((await runtime.refreshLibrary()).revision !== revision) throw new Error("LIBRARY_CHANGED")
       const definition = registry.packages[packageName]
       const session = await store.getSession(projectRoot, sessionID)
       const selected = new Set(session?.packages[packageName] ?? [])
@@ -649,8 +739,8 @@ export default {
             api.ui.dialog.clear()
             return
           }
-          await run(`${action} ${packageName}${skill ? ` ${skill}` : ""}`, sessionID)
-          await openSkillPicker(action, packageName, sessionID)
+           await run(`${action} ${packageName}${skill ? ` ${skill}` : ""}`, sessionID, undefined, revision)
+           await openSkillPicker(action, packageName, sessionID, revision)
         },
         action === "add"
           ? "All optional skills are already enabled"
@@ -660,6 +750,9 @@ export default {
 
     const openPackagePicker = async (action: "list" | "use" | "add" | "remove" | "disable", sessionID: string) => {
       await ensureSession(sessionID)
+      const snapshot = await runtime.refreshLibrary()
+      registry = snapshot.registry
+      const revision = snapshot.revision
       if (detecting) await detecting
       const session = await store.getSession(projectRoot, sessionID)
       const enabled = new Set(Object.keys(session?.packages ?? {}))
@@ -699,11 +792,11 @@ export default {
             return
           }
           if (action === "disable") {
-            await run(`${action} ${packageName}`, sessionID)
+             await run(`${action} ${packageName}`, sessionID, undefined, revision)
             api.ui.dialog.clear()
             return
           }
-          await openSkillPicker(action, packageName, sessionID)
+           await openSkillPicker(action, packageName, sessionID, revision)
         },
         "No active packages. Use 'use' to enable one",
       )
@@ -741,23 +834,76 @@ export default {
         }
         await openPackagePicker(action as "list" | "use" | "add" | "remove" | "disable", sessionID).catch((error: any) => {
           api.ui.dialog.clear()
-          toast("Skill Router Error", error?.message ?? "Could not load skill options", "error")
+          toast("Skill Router Error", "SKILL_ACTION_FAILED", "error")
         })
       })
     }
 
+    const showUsage = async (input: string, sessionID: string, back = () => api.ui.dialog.clear()) => {
+      const message = await usage.command(input, sessionID)
+      openReadOnly(input === "/budget" ? "Budget" : "Usage and Budget", `${input === "/budget" ? `Project path: ${projectRoot}\n` : ""}${message}`, back)
+    }
+    const openUsageSteps = (sessionID = activeSessionID) => {
+      openSelect("Usage scope", "Choose scope", ["today", "session", "project", "model"].map(value => ({ title: value, value })).concat([{ title: "Cancel", value: "__done__" }]), async value => {
+        if (value === "__done__") { api.ui.dialog.clear(); return }
+        // Only selection consumes the original command; Escape leaves it visible.
+        activePrompt?.reset()
+        if (value !== "model") { await showUsage(`/usage ${value}`, sessionID, () => openUsageSteps(sessionID)); return }
+        try {
+          const models = await usage.knownModels()
+          if (!models.length) { openReadOnly("Usage models", "No known model IDs recorded for this project. No provider query was made.", () => openUsageSteps(sessionID)); return }
+          openSelect("Usage model", "Filter recorded model IDs", models.map(value => ({ title: value, value })).concat([{ title: "Cancel", value: "__done__" }]), async model => {
+            if (model === "__done__") { api.ui.dialog.clear(); return }
+            await showUsage(`/usage model ${model}`, sessionID, () => openUsageSteps(sessionID))
+          })
+        } catch { toast("Usage unavailable", "Cannot read known model IDs from local storage.", "error") }
+      })
+    }
+    const openBudgetMenu = (sessionID = activeSessionID) => {
+      const options: PickerOption[] = [
+        { title: "Dashboard", value: "dashboard" },
+        { title: "Set day cost limit", value: "day-cost", description: "Project day · USD" },
+        { title: "Set session cost limit", value: "session-cost", description: "Every project session · USD" },
+        { title: "Warning percentages", value: "warnings", description: "Enable report-only warnings" },
+        { title: "Remove day cost limit", value: "remove-day-cost", description: "Also disables inherited global limit" },
+        { title: "Remove session cost limit", value: "remove-session-cost", description: "Also disables inherited global limit" },
+        { title: "Cancel", value: "__done__" },
+      ]
+      const save = async (action: BudgetEditAction, value: string) => {
+        const ticket = await usage.prepareBudgetEdit(action, value)
+        const library = await runtime.getLibrary()
+        if (!await choose("Save project budget?", `Project path: ${projectRoot}\n${action}: ${value || "disable selected cost limit, including global inheritance"}\nSession limit applies independently to every project session. Other metrics/settings are preserved. Report-only; does not block requests.`, "Save", "Cancel")) { openBudgetMenu(sessionID); return }
+        if ((await runtime.getLibrary()).revision !== library.revision) throw Error("LIBRARY_CHANGED")
+        await usage.commitBudgetEdit(ticket)
+        toast("Budget saved", "Project override saved. Report-only; no blocking.", "success")
+        openBudgetMenu(sessionID)
+      }
+      openSelect("Project budget · report-only", "Choose budget action", options, async value => {
+        if (value === "__done__") { api.ui.dialog.clear(); return }
+        if (value === "dashboard") { await showUsage("/budget", sessionID, () => openBudgetMenu(sessionID)); return }
+        const action = value as BudgetEditAction
+        if (value.startsWith("remove-")) {
+          try { await save(action, "") } catch (e) { toast("Budget not saved", (e as Error).message, "error"); openBudgetMenu(sessionID) }
+          return
+        }
+        api.ui.dialog.replace(() => <BudgetInputDialog title={value === "warnings" ? "Warning percentages: comma-separated, 0 < n ≤ 100" : "Cost limit USD: positive, finite, at most 1,000,000"} onCancel={() => openBudgetMenu(sessionID)} onSubmit={async input => {
+          try { await save(action, input) }
+          catch (e) { toast("Budget not saved", (e as Error).message, "error"); openBudgetMenu(sessionID) }
+        }} />)
+      })
+    }
+    const runLocal = (input: string, sessionID: string) => {
+      if (input === "/budget") { void showUsage(input, sessionID); return }
+      if (input === "/usage") { openUsageSteps(sessionID); return }
+      if (/^\/(usage|budget)(?:\s|$)/.test(input)) {
+        void showUsage(input, sessionID)
+      } else if (input === "/skills") openActionPicker(sessionID)
+      else void run(input.slice("/skills".length).trim(), sessionID)
+    }
     const submit = () => {
       const prompt = activePrompt
       const sessionID = activeSessionID
-      const input = prompt?.current.input ?? ""
-      if (input.trim() === "/skills") {
-        openActionPicker(sessionID)
-        return
-      }
-      void handleSkillsPrompt(input, (args) => run(args, sessionID)).then((handled) => {
-        if (handled) prompt?.reset()
-        else prompt?.submit()
-      })
+      if (!interceptLocalPrompt(prompt, input => runLocal(input, sessionID))) prompt?.submit()
     }
     const renderPrompt = (value: any, props: Record<string, unknown>, sessionID: string) => {
       let promptRef: any
@@ -766,40 +912,64 @@ export default {
         visible: value.visible,
         disabled: value.disabled,
         ref(next: any) {
-          value.ref?.(next)
           if (!next) {
-            if (activePrompt === promptRef) activePrompt = undefined
+            value.ref?.(undefined)
+            if (activePrompt === promptRef) { activePrompt = undefined; disposeSubmit() }
             return
           }
-          promptRef = next
-          activePrompt = next
+           promptRef = next
+           activePrompt = next
+           const enteringHome = sessionID === homeSession && activeSessionID !== homeSession
           activeSessionID = sessionID
-          void ensureSession(sessionID).catch((error: any) => {
-            toast("Skill Router Error", error?.message ?? "Could not initialize this skill session", "error")
+          // Public slot ref submission must use the same pre-submit decision.
+          value.ref?.({
+            get focused() { return next.focused },
+            get current() { return next.current },
+            set: (prompt: any) => next.set(prompt), reset: () => next.reset(),
+            blur: () => next.blur(), focus: () => next.focus(),
+            submit: () => { if (!interceptLocalPrompt(next, input => runLocal(input, sessionID))) next.submit() },
+          })
+            void ensureSession(sessionID, enteringHome).catch((error: any) => {
+            toast("Skill Router Error", "SKILL_ACTION_FAILED", "error")
           })
           disposeSubmit()
-          disposeSubmit = api.keymap.registerLayer({
-            commands: [
+           // registerLayer target is a concrete Renderable, NOT a Solid accessor.
+           // The public pre-key interceptor runs before autocomplete, base-mode
+           // dispatch and the textarea's native submission. Ordinary keys escape.
+           const disposeInput = registerLocalSubmit(api, next,
+             () => activePrompt === next && value.visible !== false && !value.disabled,
+             input => runLocal(input, sessionID))
+           const disposeCommands = api.keymap.registerLayer({
+             priority: 1000,
+             commands: [
+               { name: "prompt.submit", title: "Submit input", hidden: true,
+                 run(context: any) {
+                   if (!activePrompt?.focused || api.ui.dialog.open) return false
+                   context.event?.preventDefault()
+                   context.event?.stopPropagation()
+                   submit()
+                 },
+               },
               {
-                name: "input.submit",
-                title: "Submit input",
-                hidden: true,
-                run(context: any) {
-                  context.event?.preventDefault()
-                  context.event?.stopPropagation()
-                  submit()
-                },
-              },
-              {
-                name: "prompt.skills",
-                title: "Manage skills",
+                 name: "prompt.skills",
+                 title: "Manage skills",
+                 namespace: "palette",
                 desc: "Choose actions, packages, and skills",
                 slashName: "skills",
-                run: openActionPicker,
-              },
+                 run: sessionAction(() => activeSessionID, openActionPicker),
+               },
+               ...["usage", "budget"].map(name => ({
+                 name: `prompt.openarms.${name}`, title: name === "usage" ? "Show usage" : "Show budget",
+                 namespace: "palette", slashName: name, desc: "Local read-only report; no model request",
+                 run: () => { activePrompt?.reset(); runLocal(`/${name}`, activeSessionID) },
+               })),
             ],
             bindings: [],
-          })
+           })
+            const disposeWatcher = watchUsagePrompt(() => activePrompt === next ? next : undefined,
+              () => value.visible !== false && !value.disabled && !api.ui.dialog.open && api.mode.current() === "base",
+              () => openUsageSteps(sessionID))
+            disposeSubmit = () => { disposeWatcher(); disposeInput(); disposeCommands() }
         },
         onSubmit: value.on_submit,
       })
@@ -816,6 +986,23 @@ export default {
       },
     })
 
-    api.lifecycle.onDispose(() => disposeSubmit())
+    let polling = false, disposed = false, warningError = ""
+    const warningTimer = setInterval(() => {
+      if (polling || disposed || !activePrompt) return
+      polling = true
+      const session = activeSessionID
+      void usage.claimWarnings(session).then(warnings => {
+        if (disposed || session !== activeSessionID) return
+        warningError = ""
+        for (const warning of warnings) {
+          const label = warning.metric === "costUSD" ? "Cost (USD)" : warning.metric === "output" ? "Output (tokens)" : warning.metric === "contextUtilization" ? "Context utilization" : warning.metric
+          toast("Budget warning · report-only", `${warning.estimated ? "Approximate / estimated: " : "Recorded usage: "}${warning.scope} · ${label} crossed ${warning.crossed.join(", ")}% of limit. Does not block requests.`, "warning")
+        }
+      }).catch((e: Error) => {
+        if (!disposed && warningError !== e.message) { warningError = e.message; toast("Budget notifications unavailable", "Policy or local storage error; requests remain allowed. Open /budget to diagnose.", "error") }
+      }).finally(() => { polling = false })
+    }, 1000)
+    warningTimer.unref?.()
+    api.lifecycle.onDispose(() => { disposed = true; clearInterval(warningTimer); disposeSubmit() })
   },
 }

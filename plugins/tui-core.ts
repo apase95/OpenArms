@@ -1,195 +1,88 @@
-import type { Registry, StateStore } from "./shared.ts"
-import { orderedPackageNames, packageLabel, parseCommand, validateSelection } from "./shared.ts"
+export { parseRawSkillsPrompt, handleSkillsPrompt, formatSelection, executeSkillsCommand, initializeSession } from "../src/skills-service.ts"
 
-export function parseRawSkillsPrompt(input: string): string | undefined {
-  const match = input.trim().match(/^\/skills(?:\s+(.*))?$/)
-  return match ? (match[1] ?? "") : undefined
-}
+export const isLocalPrompt = (input: string) => /^\/(skills|usage|budget)(?:\s|$)/.test(input.trim())
 
-export async function handleSkillsPrompt(
-  input: string,
-  run: (args: string) => Promise<void>,
-): Promise<boolean> {
-  const args = parseRawSkillsPrompt(input)
-  if (args === undefined) return false
-  await run(args)
+/** Clear synchronously, before the host's native double-deferred submission.
+ * Never defer the consume decision and never delegate ordinary text twice. */
+export function interceptLocalPrompt(prompt: any, run: (input: string) => void): boolean {
+  const input = prompt?.current.input ?? ""
+  if (prompt?.current.mode === "shell" || !isLocalPrompt(input)) return false
+  prompt.reset()
+  run(input.trim())
   return true
 }
 
-type CommandOptions = {
-  args: string
-  projectRoot: string
-  sessionID: string
-  registry: Registry
-  store: StateStore
-  detected: Set<string>
-  confirmMismatch: (title: string, message: string) => Promise<boolean>
+/** Public host pre-key boundary, before autocomplete/base/native submission. */
+export function registerLocalSubmit(api: any, prompt: any, eligible: () => boolean, run: (input: string) => void) {
+  const matches = ["return", ...api.tuiConfig.keybinds.get("prompt.submit").map((binding: any) => binding.key), ...api.tuiConfig.keybinds.get("input.submit").map((binding: any) => binding.key)]
+    .filter(key => api.keymap.parseKeySequence(key).length === 1)
+    .map(key => api.keymap.createKeyMatcher(key))
+  return api.keymap.intercept("key", (context: any) => {
+    if (!eligible() || !prompt.focused || api.ui.dialog.open || api.mode.current() !== "base") return
+    if (!matches.some((match: any) => match(context.event))) return
+    if (interceptLocalPrompt(prompt, run)) context.consume()
+  }, { priority: 1000 })
 }
 
-export function formatSelection(packages: Record<string, string[]>, registry?: Registry): string {
-  const names = registry
-    ? orderedPackageNames(registry).filter((name) => name in packages)
-    : Object.keys(packages).sort()
-  const entries = names.map((name) => [name, packages[name]] as const)
-  if (entries.length === 0) return "No skills are enabled"
-  return entries.map(([name, skills]) => {
-    const core = registry?.packages[name]?.core ?? ["core"]
-    const enabled = [...core, ...skills].map((skill) => `    • ${skill}`).join("\n")
-    return `  ${packageLabel(name)}:\n${enabled}`
-  }).join("\n\n")
+/** Host command callbacks receive a command context, never a session ID. */
+export const sessionAction = (current: () => string, open: (sessionID: string) => void) => () => open(current())
+
+/** Public Prompt has no change callback. Read its supported current ref at 75ms;
+ * never submit/reset on typing or cancellation, and rearm only after input changes. */
+export function watchUsagePrompt(current: () => any, eligible: () => boolean, open: () => void,
+  timers: { every: (fn: () => void) => any; clear: (timer: any) => void } = {
+    every: fn => setInterval(fn, 75), clear: timer => clearInterval(timer),
+  }) {
+  let seen: string | undefined, previous: any, disposed = false
+  const timer = timers.every(() => {
+    if (disposed) return
+    const prompt = current(), input = prompt?.current?.input
+    if (prompt !== previous) { previous = prompt; seen = undefined }
+    if (input !== "/usage ") { seen = undefined; return }
+    if (seen === input || !eligible() || !prompt?.focused || prompt.current.mode === "shell") return
+    seen = input
+    open()
+  })
+  timer?.unref?.()
+  return () => { disposed = true; timers.clear(timer) }
 }
 
-export async function executeSkillsCommand(options: CommandOptions): Promise<string> {
-  const command = parseCommand(options.args)
-  if (command.action === "status") {
-    return formatSelection((await options.store.getSession(options.projectRoot, options.sessionID))?.packages ?? {}, options.registry)
-  }
-  if (command.action === "packages") {
-    const active = new Set(Object.keys((await options.store.getSession(options.projectRoot, options.sessionID))?.packages ?? {}))
-    return orderedPackageNames(options.registry)
-      .map((name) => {
-        const states = active.has(name)
-          ? ["Activated"]
-          : [options.registry.packages[name].detect.always ? "Available" : options.detected.has(name) ? "Detected" : ""].filter(Boolean)
-        return `• ${packageLabel(name)}${states.length ? ` (${states.join(" • ")})` : ""}`
-      })
-      .join("\n")
-  }
-  if (command.action === "inspect") {
-    const session = await options.store.getSession(options.projectRoot, options.sessionID)
-    const names = orderedPackageNames(options.registry).filter((name) => name in (session?.packages ?? {}))
-    if (names.length === 0) return "No skills are enabled"
-    const history = session?.loadHistory ?? []
-    return names.flatMap((name) => {
-      const definition = options.registry.packages[name]
-      const skills = [...definition.core, ...(session!.packages[name] ?? [])]
-      return [
-        `# ${packageLabel(name)}`,
-        ...skills.map((skill) => {
-          const loaded = [...history].reverse().find((record) =>
-            record.packageName === name && record.skills.some((loadedSkill) => loadedSkill === skill || loadedSkill.startsWith(`${skill}/`)))
-          const used = session?.taskPackage === name && session.taskLoadedSkills?.some(
-            (loadedSkill) => loadedSkill === skill || loadedSkill.startsWith(`${skill}/`),
-          )
-          const state = used
-            ? "Used"
-            : loaded ? "Loaded"
-            : "Enabled"
-          return `${skill}\t${state}`
-        }),
-      ]
-    }).join("\n")
-  }
-  if (command.action === "help") {
-    return [
-      "• status",
-      "• packages",
-      "• inspect",
-      "• list <package>",
-      "• use <package> [skills]",
-      "• add <package> <skills>",
-      "• remove <package> <skills>",
-      "• disable <package>",
-      "• clear",
-    ].join("\n")
-  }
-  if (command.action === "clear") {
-    const session = await options.store.getSession(options.projectRoot, options.sessionID)
-    if (Object.keys(session?.packages ?? {}).length === 0) return "No changes were made"
-    await options.store.clearSession(options.projectRoot, options.sessionID)
-    return "All skills are off for this session"
-  }
-  if (command.action === "list") {
-    const definition = options.registry.packages[command.packageName]
-    if (!definition) throw new Error(`Unknown package: ${command.packageName}`)
-    const core = definition.core.map((skill) => `• ${skill}`).join("\n")
-    const optional = definition.optional.map((skill) => `• ${skill}`).join("\n") || "• none"
-    return `CORE:\n${core}\nOPTIONAL:\n${optional}`
-  }
+/** No editable input: only navigation plus Enter can affirm; Esc always denies. */
+export function confirmationKey(key: string, selected: boolean): { selected: boolean; accepted?: boolean } {
+  if (key === "escape") return { selected: false, accepted: false }
+  if (key === "return" || key === "enter") return { selected, accepted: selected }
+  if (["up", "down", "left", "right", "tab"].includes(key)) return { selected: !selected }
+  return { selected }
+}
 
-  if (command.action === "disable") {
-    if (!options.registry.packages[command.packageName]) throw new Error(`Unknown package: ${command.packageName}`)
-    const session = await options.store.getSession(options.projectRoot, options.sessionID)
-    if (!session?.packages[command.packageName]) throw new Error(`The ${packageLabel(command.packageName)} package is not enabled`)
-    await options.store.disablePackage(options.projectRoot, options.sessionID, command.packageName)
-    return `The ${packageLabel(command.packageName)} package is off for this session`
-  }
-  if (command.action !== "use" && command.action !== "add" && command.action !== "remove") {
-    throw new Error(`Unsupported skills command: ${command.action}`)
-  }
-
-  validateSelection(options.registry, command.packageName, command.skills)
-  const definition = options.registry.packages[command.packageName]
-  const session = await options.store.getSession(options.projectRoot, options.sessionID)
-  let changedSkills = command.skills.filter((skill) => definition.optional.includes(skill))
-  if (command.action !== "use" && !session?.packages[command.packageName]) {
-    throw new Error(`The ${packageLabel(command.packageName)} package is not enabled`)
-  }
-
-  if (command.action === "use" && !definition.detect.always && !options.detected.has(command.packageName) && !session?.approvedMismatch.includes(command.packageName)) {
-    const label = packageLabel(command.packageName)
-    const allowed = await options.confirmMismatch(
-      `${label} was not found in this project`,
-      `Use the ${label} package for this session?`,
-    )
-    if (!allowed) return "No changes were made"
-    await options.store.approveMismatch(options.projectRoot, options.sessionID, command.packageName)
-  }
-
-  if (command.action === "use") {
-    const skills = command.skills.filter((skill) => !definition.core.includes(skill))
-    if (session?.packages[command.packageName]) {
-      const selected = new Set(session.packages[command.packageName])
-      const added = skills.filter((skill) => !selected.has(skill))
-      if (added.length === 0) return "No changes were made"
-      changedSkills = added
-      await options.store.addSkills(options.projectRoot, options.sessionID, command.packageName, added)
-    } else {
-      await options.store.setPackage(options.projectRoot, options.sessionID, command.packageName, skills)
+export function chooseVerifiedConfirmation(api: any, title: string, message: string, yes: string, no: string, render: (props: any) => any): Promise<boolean> {
+  return new Promise(resolve => {
+    let settled = false
+    const finish = (value: unknown) => {
+      if (settled) return
+      settled = true
+      resolve(value === true)
+      api.ui.dialog.clear()
     }
-  }
-  if (command.action === "add") {
-    const selected = new Set(session!.packages[command.packageName])
-    const added = command.skills.filter((skill) => !definition.core.includes(skill) && !selected.has(skill))
-    if (added.length === 0) return "No changes were made"
-    changedSkills = added
-    await options.store.addSkills(
-      options.projectRoot,
-      options.sessionID,
-      command.packageName,
-      added,
-    )
-  }
-  if (command.action === "remove") {
-    const core = command.skills.find((skill) => definition.core.includes(skill))
-    if (core) throw new Error(`${core} is a core skill and cannot be removed`)
-    const selected = new Set(session!.packages[command.packageName])
-    const removed = command.skills.filter((skill) => selected.has(skill))
-    if (removed.length === 0) return "No changes were made"
-    await options.store.removeSkills(options.projectRoot, options.sessionID, command.packageName, removed, definition)
-    return `Removed from ${packageLabel(command.packageName)}:\n${removed.map((skill) => `• ${skill}`).join("\n")}`
-  }
-  return changedSkills.length
-    ? `Enabled for ${packageLabel(command.packageName)}:\n${changedSkills.map((skill) => `• ${skill}`).join("\n")}`
-    : command.action === "use"
-      ? `Enabled for ${packageLabel(command.packageName)}:\n${definition.core.map((skill) => `• ${skill} (Core Skill)`).join("\n")}`
-      : "No skills were changed"
+    api.ui.dialog.replace(() => render({ title, message, yes, no, onConfirm: finish }), () => finish(false))
+  })
 }
 
-type SessionOptions = {
-  projectRoot: string
-  sessionID: string
-  parentID?: string
-  store: StateStore
-  confirmRestore: (message: string) => Promise<boolean>
-}
-
-export async function initializeSession(options: SessionOptions) {
-  if (options.parentID) return options.store.inheritSession(options.projectRoot, options.parentID, options.sessionID)
-  const last = await options.store.getLastSelection(options.projectRoot)
-  const session = await options.store.startSession(options.projectRoot, options.sessionID)
-  if (Object.keys(last).length === 0) return session
-  const list = Object.entries(last).flatMap(([name, skills]) => [`- ${name}`, ...skills.map((skill) => `- ${skill}`)])
-  const restore = await options.confirmRestore(["The last session used:", ...list, "", "Use these skills again?"].join("\n"))
-  return restore ? options.store.restoreSession(options.projectRoot, options.sessionID) : session
+/** Trusted UI action contract; not a renderer or host SDK compatibility proof. */
+export async function runVerifiedAction({ runtime, action, skill, sessionID, scope, ticket, choose, toast }: any) {
+  try {
+  const approval = ticket ?? await runtime.prepareVerifiedGrant({ skill }, { sessionID })
+  if (action === "grant" && !["Available", "Enabled", "Loaded", "Used"].includes(approval.authorization.state)) {
+    toast("Skill approval denied", `${skill}: ${approval.status.state} (${approval.status.reason})`, "warning")
+    return
+  }
+  if (!await choose(`${action} ${skill}?`, `Scope: ${scope}. This does not approve registry sources or filesystem access.`, action === "grant" ? "Grant" : "Revoke", "Cancel")) return
+  const result = await (action === "grant" ? runtime.commitVerifiedGrant : runtime.commitVerifiedRevoke)(approval, scope)
+  toast(result.ok ? `Skill ${action} saved` : `Skill ${action} denied`, result.ok ? `${skill}: ${scope}` : `${skill}: ${result.error?.code ?? "INVALID_GRANT"}`, result.ok ? "success" : "warning")
+  return result
+  } catch {
+    const result = { ok: false, state: "Unverified", error: { code: "RUNTIME_ERROR" } }
+    toast("Skill action failed", "RUNTIME_ERROR", "warning")
+    return result
+  }
 }
