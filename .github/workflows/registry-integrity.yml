@@ -1,0 +1,16 @@
+name: Registry integrity and isolated runtime tests
+on: [push, pull_request]
+jobs:
+  synthetic-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Production operator CLI, authored data only; failure stops runtime tests.
+      - run: node scripts/registry-v2-ci.mjs
+      - run: npm run test:policy
+      - run: node scripts/arms-test.mjs full --task ci-integrity --file scripts/registry-v2.mjs --file scripts/registry-v2-operations.mjs --file scripts/registry-v2-cli.mjs --file scripts/registry-v2-ci.mjs --file tests/registry-v2.test.mjs

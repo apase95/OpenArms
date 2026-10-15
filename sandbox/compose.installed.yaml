@@ -1,0 +1,34 @@
+# Only the registry and skill library are exposed, not backups, auth or databases.
+services:
+  cli:
+    environment:
+      OPENARMS_LIBRARY_ROOT: /opt/installed-router
+    volumes:
+      - type: bind
+        source: ${ROUTER_LIBRARY:-/home/hodangthaiduy/.local/share/opencode-skill-router}/registry.json
+        target: /opt/installed-router/registry.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ROUTER_LIBRARY:-/home/hodangthaiduy/.local/share/opencode-skill-router}/skills
+        target: /opt/installed-router/skills
+        read_only: true
+        bind:
+          create_host_path: false
+  smoke:
+    environment:
+      OPENARMS_LIBRARY_ROOT: /opt/installed-router
+    volumes:
+      - type: bind
+        source: ${ROUTER_LIBRARY:-/home/hodangthaiduy/.local/share/opencode-skill-router}/registry.json
+        target: /opt/installed-router/registry.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ROUTER_LIBRARY:-/home/hodangthaiduy/.local/share/opencode-skill-router}/skills
+        target: /opt/installed-router/skills
+        read_only: true
+        bind:
+          create_host_path: false

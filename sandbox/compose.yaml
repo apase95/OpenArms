@@ -1,0 +1,61 @@
+name: openarms-sandbox
+
+x-runtime: &runtime
+  image: ${OPENARMS_SANDBOX_IMAGE:-openarms-sandbox:local}
+  build:
+    context: ${OPENARMS_BUILD_CONTEXT:-..}
+    dockerfile: sandbox/Dockerfile
+    target: runtime
+    args:
+      NODE_VERSION: ${NODE_VERSION:-24.12.0}
+      OPENCODE_VERSION: ${OPENCODE_VERSION:-1.18.35}
+      OPENARMS_BUILD_FINGERPRINT: ${OPENARMS_BUILD_FINGERPRINT:-legacy}
+      OPENARMS_LIBRARY_MODE: ${OPENARMS_LIBRARY_MODE:-repository}
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs:
+    - /tmp:rw,exec,uid=1000,gid=1000,mode=1777
+  volumes:
+    - config:/home/node/.config
+    - state:/home/node/.local/state
+    - data:/home/node/.local/share
+    - cache:/home/node/.cache
+    - project:/workspace/project
+  environment:
+    TERM: ${TERM:-xterm-256color}
+    SANDBOX_FIXTURE: ${SANDBOX_FIXTURE:-docs-project}
+    EXPECTED_OPENCODE_VERSION: ${OPENCODE_VERSION:-1.18.35}
+    OPENARMS_SERVER_STARTUP_MS: ${OPENARMS_SERVER_STARTUP_MS:-60000}
+    OPENARMS_REQUEST_TIMEOUT_MS: ${OPENARMS_REQUEST_TIMEOUT_MS:-120000}
+
+services:
+  test:
+    image: openarms-sandbox-test:local
+    build:
+      context: ..
+      dockerfile: sandbox/Dockerfile
+      target: test
+      args:
+        NODE_VERSION: ${NODE_VERSION:-24.12.0}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=1777
+  cli:
+    <<: *runtime
+    stdin_open: true
+    tty: true
+  smoke:
+    <<: *runtime
+    command: [node, /opt/openarms/sandbox/smoke-runtime.mjs]
+
+volumes:
+  config:
+  state:
+  data:
+  cache:
+  project:

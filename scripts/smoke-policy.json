@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "runnerVersion": "0.3.0",
+  "environment": ["NODE_VERSION", "OPENCODE_VERSION", "SANDBOX_FIXTURE", "TERM"],
+  "commonInputs": ["scripts/arms-test.mjs", "scripts/test-process.mjs", "scripts/test-failure.mjs", "sandbox/process-output.mjs", "scripts/smoke-cache.mjs", "scripts/smoke-inputs.mjs", "scripts/smoke-policy.json", "package.json", "package-lock.json", ".dockerignore", "sandbox/Dockerfile", "sandbox/compose.yaml", "sandbox/entrypoint.mjs", "sandbox/manage.mjs"],
+  "modes": {
+    "smoke-static": {
+      "inputs": ["sandbox/smoke-static.mjs", "sandbox/config/opencode.json", "sandbox/config/tui.json", "sandbox/compose.installed.yaml", "plugins/skill-router-server.ts", ".dockerignore"],
+      "roots": [],
+      "library": false
+    },
+    "smoke-runtime": {
+      "inputs": ["sandbox/smoke-runtime.mjs", "sandbox/config/opencode.json"],
+      "roots": ["plugins/skill-router-server.ts"],
+      "library": true
+    },
+    "tui-smoke": {
+      "inputs": ["sandbox/tui-smoke.py", "sandbox/config/opencode.json", "sandbox/config/tui.json"],
+      "roots": ["plugins/skill-router-server.ts", "plugins/skill-router-tui.tsx"],
+      "library": true
+    }
+  }
+}

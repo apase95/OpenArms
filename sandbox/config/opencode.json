@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "file:///opt/openarms/plugins/skill-router-server.ts"
+  ],
+  "permission": {
+    "read": {
+      "*": "allow",
+      "SKILL.md": "deny",
+      "*SKILL.md": "deny"
+    },
+    "external_directory": {
+      "*": "ask",
+      "/opt/openarms/**": "allow",
+      "/opt/installed-router/**": "allow"
+    },
+    "bash": {
+      "*": "allow",
+      "*SKILL.md*": "deny"
+    },
+    "skill": {
+      "*": "deny"
+    }
+  }
+}
