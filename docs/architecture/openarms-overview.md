@@ -38,6 +38,37 @@ load or completed redesign validation is claimed here.
 
 ## Historical baseline and design context
 
+### Sprint 4.3 API-only decompiler/writer (16/10/2026)
+
+Strict schema → explicit caller-selected model adapter → bounded chunk/merge/compact
+→ literal evidence/link validation → independent writer revalidation and fresh audits
+→ separate target-bound write consent → locked private stage/fsync/rename transaction.
+SHA256 manifests remain unregistered; no registry/loader/TUI install integration.
+Host-added context isolation and provider billing caps are not guaranteed by SDK;
+owner-controlled filesystem and trusted caller host are explicit assumptions.
+[API and limitations](../testing/how_to_test/Sprint_43.md).
+
+### Sprint 4.2 staged security review (16/10/2026)
+
+`/skills audit <github-url>` is a reachable TUI-only audit command, not an install
+dispatcher. Bounded download → in-memory extraction → offline scanner → production
+ConfirmationDialog → cleanup. HIGH/CRITICAL block unconditionally; MEDIUM needs
+explicit opt-in plus a sanitized fingerprint-bound audit event. Recomputed reports
+reject stale content/source/approval. No registry, persistent package or loading
+authority is granted. Snippets withhold raw credentials; all scripts remain inert.
+Heuristic coverage is not a security proof. [Runbook/evidence](../testing/how_to_test/Sprint_42.md).
+
+### Sprint 4.1 staged ingestion (16/10/2026)
+
+Disconnected APIs in `skill-scope-resolver.ts`, `skill-remote-fetcher.ts` and
+`skill-archive-extractor.ts` parse install intent, plan local/global storage and
+download/normalize bounded GitHub tar.gz into untrusted data. HTTP uses validated
+public IPv4 pinned to the TLS connection; no shell/Git/proxy/generic fetch.
+Extraction is in-memory, never a registry or installed target write. Overwrite
+only approves a plan and cannot delete existing data. Future scanner/decompiler/
+writer/registry must precede dispatcher/TUI integration. The current local
+loader/tool API is unchanged. [API, threat model and offline evidence](../testing/how_to_test/Sprint_41.md).
+
 ### Domain-aware governor source update (15/10/2026)
 
 The production hook saves raw output with an exclusive owner-only file and

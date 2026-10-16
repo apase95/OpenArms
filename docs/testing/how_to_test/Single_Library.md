@@ -37,8 +37,11 @@ Do not substitute or merge another source when the chosen folder fails.
   `/skills packages` and `/skills list <package>` show its metadata, not a second
   source or permission grant.
 - **Ask** for an exact selected skill ID when a task needs its content. The sole
-  server content tool is `load_skill({skill: "<selected-id>"})`; it accepts no
-  workflow/reference selector, arbitrary path or package-wide load.
+   server content tool is `load_skill({skill: "<selected-id>", topic?: "<reference-id>"})`.
+   Topic chỉ map qua references allowlist cùng skill v2; không nhận arbitrary path,
+   workflow selector hoặc package-wide load. Bỏ topic để nạp core.
+   V2 kiểm SHA256 trên raw bytes trước decode; v1 vẫn legacy/unhashed, không được
+   gọi là verified. HASH_MISMATCH không tạo Loaded/history mới.
 - **Selected** means selected but not loaded. **Loaded** records a successful
   router load, not proof the model followed the instructions. **Missing** means
   the ID is unavailable/unselected or a library error prevents status; consult

@@ -7,6 +7,9 @@ Tài liệu này dành cho người muốn tự thao tác, quan sát màn hình 
 
 | Hướng dẫn | Task | Bạn sẽ kiểm tra được gì? |
 |---|---|---|
+| [Sprint 4.3](how_to_test/Sprint_43.md) | TSK409–413 API-only | Schema/service/SDK mocks, compact/audit, independent transactional writer; không registry/load/install |
+| [Sprint 4.2](how_to_test/Sprint_42.md) | TSK-405–408 | Offline corpus/scanner, staged-only TUI audit; xem riêng trạng thái PTY |
+| [Sprint 4.1](how_to_test/Sprint_41.md) | TSK-401–404 | Staged scope/GitHub/tar.gz API, offline security; chưa TUI/end-to-end install |
 | [Sprint 3.4 v2](how_to_test/Sprint_34v2.md) | TSK-312v2–314v2 | Build formats, snippets, fallback và fixture 30KB→<1KB; không live compiler proof |
 | [Sprint 3.5 v2](how_to_test/Sprint_35v2.md) | TSK-315v2–319v2 | Safety, project raw sink, telemetry/usage; Docker PTY real tools + synthetic model transport |
 | [Sprint 3.3 v2](how_to_test/Sprint_33v2.md) | TSK-308v2–311v2 | Git diff priorities/summary, bounded excerpts, observed read/cat detection; không build/phase acceptance |

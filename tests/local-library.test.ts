@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import { mkdtemp, mkdir, writeFile, rm, symlink, rename } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { createHash } from "node:crypto"
 import { createLocalRuntime } from "../src/local-library.ts"
 import { executeLocalSkillsCommand } from "../src/skills-service.ts"
 
@@ -253,7 +254,7 @@ test("synthetic v2 metadata needs no grants and registry edits retire selections
   try {
     await mkdir(path.join(dir, "skills"))
     await writeFile(path.join(dir, "skills", "example.md"), "synthetic")
-    const metadata = { schemaVersion: 2, packages: { demo: { core: ["example"], optional: [], detect: { files: [], extensions: [], dependencies: [] } } }, skills: { example: { path: "skills/example.md", owner: "demo", kind: "core", contentHash: `sha256:${"0".repeat(64)}`, maxTokens: 100, defaultPermission: "deny", workflows: {}, references: {} } } }
+    const metadata = { schemaVersion: 2, packages: { demo: { core: ["example"], optional: [], detect: { files: [], extensions: [], dependencies: [] } } }, skills: { example: { path: "skills/example.md", owner: "demo", kind: "core", contentHash: `sha256:${createHash("sha256").update("synthetic").digest("hex")}`, maxTokens: 100, defaultPermission: "deny", workflows: {}, references: {} } } }
     await writeFile(path.join(dir, "registry.json"), JSON.stringify(metadata))
     const options = { directory: dir, stateFile: path.join(dir, "state.json") }
     const a = await createLocalRuntime(options), b = await createLocalRuntime(options)

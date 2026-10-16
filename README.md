@@ -19,6 +19,14 @@ and prevents unregistered skill files from bypassing the registry.
 
 ## Current Scope
 
+Sprint 4.5 is **partial**, not accepted: [KPI protocol and remaining work](docs/testing/how_to_test/Sprint_45.md).
+`/skills install [--local|--global] [--overwrite] <https-github-url>` now runs the
+audited fetch/decompile/register pipeline with an explicitly entered provider/model,
+separate source-send/write consent and optional confirmed library switch. Use the
+`install` menu action for interactive URL entry. No model or library fallback.
+The paired UsageStore reporting API does not prove live savings; Routing Index and
+50 real comparative tasks remain outstanding.
+
 - Intercepts `/skills` in the OpenCode TUI.
 - Uses exactly one explicitly chosen library per canonical project; new projects start **Not configured**.
 - Choose the folder containing `registry.json` and `skills/` from `/skills` → Status. Libraries are never merged or implicitly selected from the environment.

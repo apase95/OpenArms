@@ -12,6 +12,28 @@ import { check, detectBypass } from "../scripts/check-test-policy.mjs"
 const plan = (files, args = []) => createPlan(files, parseArgs(args))
 const scheduled = (result) => result.decisions.filter((decision) => ["required", "recommended"].includes(decision.status)).map((decision) => decision.mode)
 
+test('Sprint43 API-only model and writer boundaries never schedule host smoke', () => {
+  const result = plan(['src/skill-decompiler-service.ts', 'src/skill-decompiler-writer.ts', 'src/skill-model-adapter.ts'])
+  assert.deepEqual(scheduled(result), ['syntax', 'related'])
+  for (const file of ['tests/skill-decompiler-service.test.ts', 'tests/skill-decompiler-writer.test.ts', 'tests/skill-model-adapter.test.ts']) assert.ok(result.related.includes(file))
+})
+
+test('Sprint42 scanner/review mappings are explicit; actual frontend still requires PTY', () => {
+  const files = ['src/skill-security-audit.ts', 'src/skill-audit-review.ts']
+  assert.deepEqual(plan(files).related, ['tests/skill-security-audit.test.ts', 'tests/sprint42.test.ts'])
+  assert.deepEqual(scheduled(plan(files)), ['syntax', 'related'])
+  const integration = plan([...files, 'plugins/skill-router-tui.tsx', 'scripts/synthetic-context.mjs'])
+  assert.deepEqual(scheduled(integration), ['syntax', 'full', 'smoke-static', 'smoke-runtime', 'tui-smoke'])
+})
+
+test("Sprint41 ingestion mapping is isolated and never schedules host smoke", () => {
+  const files = ["src/skill-scope-resolver.ts", "src/skill-remote-fetcher.ts", "src/skill-archive-extractor.ts"]
+  const result = plan(files)
+  assert.deepEqual(result.related, ["tests/skill-install.test.ts"])
+  assert.deepEqual(scheduled(result), ["syntax", "related"])
+  assert.deepEqual(commandFor("related", files, result)[1].slice(3), ["tests/skill-install.test.ts"])
+})
+
 test("pre-push runs full once and preserves selective integration and unknown blocking", () => {
   assert.deepEqual(scheduled(plan(["docs/example.md"], ["--pre-push"])), ["full"])
   assert.deepEqual(scheduled(plan(["plugins/server-core.ts"], ["--pre-push"])), ["syntax", "full"])

@@ -9,6 +9,10 @@ import { HOME_SESSION as homeSession } from "../src/state-store.ts"
 import { chooseVerifiedConfirmation, confirmationKey, sessionAction, interceptLocalPrompt, registerLocalSubmit, watchUsagePrompt } from "./tui-core.ts"
 import path from "node:path"
 import { createUsageRuntime, type BudgetEditAction } from "../src/usage-runtime.ts"
+import { appendFile } from "node:fs/promises"
+import { chooseAuditDialog, stageSkillAudit, type AuditOverrideRecord } from "../src/skill-audit-review.ts"
+import { installSkill } from "../src/skill-install-pipeline.ts"
+import { createOpenCodeModelAdapter, requireDecompilerModel } from "../src/skill-model-adapter.ts"
 
 type PickerOption = {
   title: string
@@ -290,6 +294,33 @@ function ConfirmationDialog(props: any) {
     </box>
     </box>
   </box>
+}
+
+/** Same renderer/gateway for real audit commands and injected offline host fixtures. */
+export function createStagedAuditUI(api: any, record: (event: AuditOverrideRecord) => Promise<void>) {
+  return { choose: (title: string, message: string, yes: string, no: string) => chooseAuditDialog(api, props => <ConfirmationDialog api={api} {...props} />, title, message, yes, no), record }
+}
+
+/** Shared production UI; fixture injects external transport/model only. */
+export async function runSkillInstallUI(api: any, input: string, runtime: Awaited<ReturnType<typeof createLocalRuntime>>, options: Omit<Parameters<typeof installSkill>[1], 'projectRoot' | 'ui' | 'progress'>) {
+  const before = await runtime.getLibrary()
+  const audit = createStagedAuditUI(api, async record => {
+    await appendFile(path.join(path.dirname(runtime.stateFile), 'skill-audit-overrides.jsonl'), JSON.stringify(record) + '\n', { mode: 0o600 })
+  })
+  const result = await installSkill(input, { ...options, projectRoot: runtime.projectRoot, ui: { ...audit, choose: async (...args) => {
+    if ((await runtime.getLibrary()).revision !== before.revision) throw Error('LIBRARY_CHANGED')
+    return audit.choose(...args)
+  } }, progress: message => api.ui.toast({ title: 'Skill installation', message, variant: 'info', duration: 5000 }) })
+  // Registration never implicitly changes single-library configuration.
+  let active = false
+  if ((await runtime.getLibrary()).revision === before.revision) {
+    if (before.root === result.root) { await runtime.refreshLibrary(); active = true }
+    else if (await audit.choose('Use installed library?', `Library: ${result.root}\nThis replaces the workspace library and clears selections, load history and task locks. No merge/fallback. Start /new after switching.`, 'Switch library', 'Keep current library')) {
+      await runtime.configureLibrary(result.root, before.revision, true); active = true
+    }
+  }
+  api.ui.toast({ title: 'Skill installed', message: `${result.id}: ${result.references} references. ${active ? 'Choose /skills use to select; load exact ID/topic only when needed.' : 'Current library unchanged; configure the installed root in /skills status to use it.'} No measured token-savings claim.`, variant: 'success', duration: 12000 })
+  return result
 }
 
 function BudgetInputDialog(props: { title: string; onCancel: () => void; onSubmit: (value: string) => Promise<void> }) {
@@ -816,6 +847,7 @@ export default {
         { title: "disable", value: "disable", description: "Disable one package" },
         { title: "clear", value: "clear", description: "Disable all packages for this session" },
         { title: "help", value: "help", description: "Show command syntax" },
+        { title: "install", value: "install", description: "Install an audited GitHub skill" },
         { title: "Done", value: "__done__" },
       ].map((option) => option.value === "__done__" ? option : { ...option, descriptionAlign: "left" })
       openSelect("Select Action", "Type to filter actions", actions, async (action) => {
@@ -823,6 +855,7 @@ export default {
           api.ui.dialog.clear()
           return
         }
+        if (action === 'install') { openInstall(); return }
         if (["status", "packages", "inspect", "help"].includes(action)) {
           await run(action, sessionID, () => openActionPicker(sessionID))
           return
@@ -837,6 +870,31 @@ export default {
           toast("Skill Router Error", "SKILL_ACTION_FAILED", "error")
         })
       })
+    }
+
+    let installing = false
+    const openInstall = (input?: string) => {
+      if (installing) { toast('Install busy', 'Finish or cancel the current installation.', 'warning'); return }
+      const modelInput = (command: string) => {
+        api.ui.dialog.replace(() => <BudgetInputDialog title="Install model: enter exact providerID/modelID (no fallback)" onCancel={() => api.ui.dialog.clear()} onSubmit={async value => {
+          const slash = value.indexOf('/')
+          const selectedModel = requireDecompilerModel({ providerID: value.slice(0, slash), modelID: slash < 1 ? '' : value.slice(slash + 1) })
+          installing = true
+          const controller = new AbortController()
+          api.lifecycle.onDispose(() => controller.abort())
+          try {
+            await runSkillInstallUI(api, command, runtime, { selectedModel, adapter: createOpenCodeModelAdapter(api.client), signal: controller.signal })
+            await refreshRegistry()
+          } catch (error) {
+            const code = (error as Error).message
+            toast(/CANCELLED|CONSENT|AUDIT_DENIED/.test(code) ? 'Install cancelled or denied' : 'Install failed', 'No automatic retry or fallback. Inspect target/registry before retrying if publication or cleanup failed. Existing library selection is not escalated.', 'warning')
+          } finally { installing = false }
+        }} />)
+        api.ui.dialog.setSize('large')
+      }
+      if (input?.trim() !== '/skills install') { if (input) { modelInput(input); return } }
+      api.ui.dialog.replace(() => <BudgetInputDialog title="Install: [--local|--global] [--overwrite] HTTPS GitHub URL" onCancel={() => api.ui.dialog.clear()} onSubmit={async value => modelInput(`/skills install ${value}`)} />)
+      api.ui.dialog.setSize('large')
     }
 
     const showUsage = async (input: string, sessionID: string, back = () => api.ui.dialog.clear()) => {
@@ -893,6 +951,15 @@ export default {
       })
     }
     const runLocal = (input: string, sessionID: string) => {
+      if (/^\/skills\s+install(?:\s|$)/.test(input)) { openInstall(input); return }
+      if (/^\/skills\s+audit(?:\s|$)/.test(input)) {
+        const url = input.replace(/^\/skills\s+audit\s*/, '')
+        void stageSkillAudit(url, createStagedAuditUI(api, async record => {
+          await appendFile(path.join(path.dirname(stateFile), 'skill-audit-overrides.jsonl'), JSON.stringify(record) + '\n', { mode: 0o600 })
+        })).then(result => toast('Staged audit only', result === 'denied' ? 'Review denied. Temporary download removed. Nothing installed.' : 'Review continued; temporary download removed. Nothing installed or loaded.', result === 'denied' ? 'warning' : 'info'))
+          .catch(() => toast('Audit failed', 'Download, audit or cleanup failed. Nothing installed.', 'error'))
+        return
+      }
       if (input === "/budget") { void showUsage(input, sessionID); return }
       if (input === "/usage") { openUsageSteps(sessionID); return }
       if (/^\/(usage|budget)(?:\s|$)/.test(input)) {
@@ -958,11 +1025,12 @@ export default {
                 slashName: "skills",
                  run: sessionAction(() => activeSessionID, openActionPicker),
                },
-               ...["usage", "budget"].map(name => ({
+                ...["usage", "budget"].map(name => ({
                  name: `prompt.openarms.${name}`, title: name === "usage" ? "Show usage" : "Show budget",
                  namespace: "palette", slashName: name, desc: "Local read-only report; no model request",
                  run: () => { activePrompt?.reset(); runLocal(`/${name}`, activeSessionID) },
-               })),
+                })),
+                { name: 'prompt.openarms.install', title: 'Install skill', namespace: 'palette', slashName: 'skills-install', desc: 'Audited GitHub install; explicit model and write consent', run: () => { activePrompt?.reset(); openInstall() } },
             ],
             bindings: [],
            })

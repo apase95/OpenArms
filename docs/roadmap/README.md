@@ -2,6 +2,9 @@
 
 Thư mục này chứa danh sách các task kỹ thuật chi tiết phân theo từng giai đoạn (Phase) từ lúc khởi tạo dự án cho đến định hướng phát triển trong tương lai.
 
+Phase 4 có [staged security audit Sprint 4.2](../testing/how_to_test/Sprint_42.md),
+chưa phải end-to-end install hay nghiệm thu Phase 4. Host acceptance xem báo cáo.
+
 ---
 
 ## 🗺️ Bản đồ các Giai đoạn (Phases Overview)

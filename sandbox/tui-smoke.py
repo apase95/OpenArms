@@ -56,6 +56,7 @@ submitted = False
 passed = False
 phase = "open"
 local_cases = [
+    ("/skills install --local https://github.com/authored/pty-workflow", "Install model:", ""),
     ("/skills packages", "Skill Packages", ""),
     ("/skills status", "Skill Status", ""),
     ("/skills list docs", "Docs Skills", ""),
@@ -71,6 +72,11 @@ local_cases = [
     ("/budget invalid", "Usage and Budget", "Usage:"),
 ]
 local_index = -1
+audit_cases = [('medium', 'default'), ('medium', 'escape'), ('medium', 'override'), ('high', 'override'), ('critical', 'override')]
+audit_index = 0
+install_cases = ['cancel', 'high', 'failure', 'local', 'global']
+install_index = 0
+install_decision_at = 0
 keys = []
 next_key_at = 0
 cols = 120
@@ -262,7 +268,7 @@ try:
             output.clear()
             # Keep the pointer over a row while the viewport moves underneath it.
             assert "Grant" not in visible and "Revoke" not in visible
-            keys = [b"\x1b[B"] * 11 + [b"\r"]
+            keys = [b"\x1b[B"] * 12 + [b"\r"]
             next_key_at = now + 1
             phase = "status"
             stage_started = now
@@ -424,11 +430,86 @@ try:
             stage_started = now
         elif phase == "switched" and not keys and "Skill Status" in visible and "/tmp/openarms-pty-other" in visible:
             assert "docs-editor" not in visible
-            keys = [b"\x1b", b"/arms-test-domains", b"\r"]
+            keys = [b"\x1b", b"/arms-test-audit-medium", b"\r"]
             next_key_at = now + 1
-            phase = "domains"
+            phase = "audit-dialog"
             stage_started = now
-            print("\nSTAGE: tui-domain-workflow", flush=True)
+        elif phase == 'audit-dialog' and not keys:
+            severity, action = audit_cases[audit_index]
+            title = 'Staged security audit' if severity == 'medium' else 'Security audit blocked'
+            if title in visible and 'Cancel' in visible:
+                assert 'Force Install' not in visible
+                if severity == 'medium':
+                    if 'Continue despite risk' not in visible:
+                        continue
+                    measure(title, ['Cancel', 'Continue despite risk'], True)
+                else:
+                    assert 'Continue despite risk' not in visible
+                    assert 'Close (blocked)' in visible
+                keys = [b'\x1b'] if action == 'escape' else [b'\x1b[B', b'\r'] if action == 'override' else [b'\r']
+                next_key_at = now + 0.5
+                phase = 'audit-result'
+                stage_started = now
+        elif phase == 'audit-result' and not keys and 'Audit fixture complete' in visible:
+            result = subprocess.run(['docker', 'exec', name, 'node', '-e', "process.stdout.write(require('node:fs').readFileSync('/tmp/openarms-audit-result.json'))"], capture_output=True, text=True, check=True, timeout=10)
+            evidence = json.loads(result.stdout)
+            severity, action = audit_cases[audit_index]
+            expected = 'staged-review-only' if severity == 'medium' and action == 'override' else 'denied'
+            if evidence.get('sequence') != audit_index + 1 or evidence['severity'] != severity or evidence['result'] != expected:
+                continue  # Wait for new differential toast/result rather than a prior frame.
+            assert evidence['installed'] is False
+            assert len(evidence['records']) == (1 if expected == 'staged-review-only' else 0)
+            if evidence['records']:
+                assert evidence['records'][0]['event'] == 'STAGED_AUDIT_RISK_OVERRIDE'
+            print('\nPASS: production audit modal ' + severity + ' ' + action + ' -> ' + expected, flush=True)
+            audit_index += 1
+            if audit_index < len(audit_cases):
+                keys = [b'\x15', ('/arms-test-audit-' + audit_cases[audit_index][0]).encode(), b'\r']
+                phase = 'audit-dialog'
+            else:
+                keys = [b'\x15', b'/arms-test-install-cancel', b'\r']
+                phase = 'install'
+            next_key_at = now + 1
+            stage_started = now
+        elif phase == 'install' and not keys and now >= install_decision_at:
+            kind = install_cases[install_index]
+            title = next((title for title in ['Send source to selected model?', 'Staged security audit', 'Security audit blocked', 'Install verified skill?', 'Use installed library?'] if title in visible), None)
+            if title:
+                keys = [b'\r'] if kind == 'cancel' or title == 'Security audit blocked' else [b'\x1b[B', b'\r']
+                next_key_at = now + 0.3
+                install_decision_at = now + 2
+                stage_started = now
+            elif 'Install fixture complete' in visible:
+                result = subprocess.run(['docker', 'exec', name, 'node', '-e', "process.stdout.write(require('node:fs').readFileSync('/tmp/openarms-install-result.json'))"], capture_output=True, text=True, check=True, timeout=10)
+                evidence = json.loads(result.stdout)
+                if evidence['kind'] != kind:
+                    continue
+                if kind in ('local', 'global'):
+                    assert evidence['result']['id'] == 'pty-workflow', evidence
+                    assert evidence['calls'] == 1 and evidence['closed'], evidence
+                    assert evidence['library']['root'] == evidence['result']['root'], evidence
+                    keys = [b'\x15', b'/skills use pty-workflow', b'\r']
+                    phase = 'install-select'
+                else:
+                    assert 'error' in evidence['result'], evidence
+                    assert evidence['calls'] == (1 if kind == 'failure' else 0), evidence
+                    print('\nPASS: deterministic install refusal/failure ' + json.dumps(evidence), flush=True)
+                    install_index += 1
+                    keys = [b'\x15', ('/arms-test-install-' + install_cases[install_index]).encode(), b'\r']
+                next_key_at = now + 1
+                stage_started = now
+        elif phase == 'install-select' and not keys and 'Skills Enabled' in visible:
+            keys = [b'\x15', b'/arms-test-installed-load', b'\r']
+            next_key_at = now + 1
+            phase = 'install-load'
+            stage_started = now
+        elif phase == 'install-load' and not keys and 'Installed core/topic loaded' in visible:
+            print('\nPASS: deterministic ' + install_cases[install_index] + ' install, explicit selection and real core/topic load (not model autonomy)', flush=True)
+            install_index += 1
+            keys = [b'\x15', ('/arms-test-install-' + install_cases[install_index]).encode(), b'\r'] if install_index < len(install_cases) else [b'\x15', b'/arms-test-domains', b'\r']
+            phase = 'install' if install_index < len(install_cases) else 'domains'
+            next_key_at = now + 1
+            stage_started = now
         elif phase == "domains" and not keys and ("Domain workflow passed" in visible or "Domain workflow failed" in visible):
             result = subprocess.run(["docker", "exec", name, "node", "-e", "process.stdout.write(require('node:fs').readFileSync('/tmp/openarms-domain-result.json'))"], capture_output=True, text=True, check=True, timeout=10)
             evidence = json.loads(result.stdout)

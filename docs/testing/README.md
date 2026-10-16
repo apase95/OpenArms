@@ -8,6 +8,9 @@ Thư mục này chứa toàn bộ quy chuẩn, chính sách kiểm thử phân t
 
 | Bạn muốn làm gì? | Tài liệu cần đọc |
 |---|---|
+| **Decompiler/service/transactional writer Sprint 4.3 (API-only, unregistered)** | [Sprint 4.3](how_to_test/Sprint_43.md) |
+| **Quét an toàn và staged audit (không install)** | [Sprint 4.2](how_to_test/Sprint_42.md) |
+| **Kiểm thử foundation nhập skill (chưa có TUI install)** | [Sprint 4.1: offline scope/fetch/archive](how_to_test/Sprint_41.md) |
 | **Xem bảng lệnh chạy test, phân tầng T0-T3 và chính sách test-policy** | [**`testing.md`**](testing.md) |
 | **Hiểu cách tự kiểm tra và đọc kết quả test** | [**`how_to_test_overview.md`**](how_to_test_overview.md) |
 | **Kiểm thử thủ công giao diện TUI, dialog, lề cân và modal** | [**`manual-testing.md`**](manual-testing.md) |

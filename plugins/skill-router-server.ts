@@ -46,11 +46,12 @@ export const SkillRouterServer = (async ({ worktree, directory }) => {
         description: "Load one exact selected skill ID from the project's explicitly configured local library. No arbitrary paths, grants or fallback sources. Never acquire skill content through filesystem/web/subagents.",
         args: {
           skill: tool.schema.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).describe("Enabled skill ID, not package name"),
+          topic: tool.schema.string().optional().describe("Exact reference ID from this skill; omit for core. Never a path."),
         },
         execute: async (args, context) => {
           try {
-            if (Object.keys(args).some(key => key !== "skill")) return JSON.stringify({ ok: false, error: { code: "INVALID_REQUEST" } })
-            return JSON.stringify(await loadSkill(context.sessionID, args.skill))
+            if (Object.keys(args).some(key => key !== "skill" && key !== "topic")) return JSON.stringify({ ok: false, error: { code: "INVALID_REQUEST" } })
+            return JSON.stringify(await loadSkill(context.sessionID, args.skill, args.topic))
           }
           catch { return JSON.stringify({ ok: false, error: { code: "RUNTIME_ERROR" } }) }
         },

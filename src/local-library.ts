@@ -1,6 +1,8 @@
 import path from "node:path"
 import { constants } from "node:fs"
-import { open, readFile, realpath, stat } from "node:fs/promises"
+import { open, readFile, realpath, stat, lstat } from "node:fs/promises"
+import { parseJSON } from "../scripts/registry-v2.mjs"
+import type { VerifiedRegistry } from "./registry-v2-types.ts"
 import { createHash } from "node:crypto"
 import { TextDecoder } from "node:util"
 import { registrySelection } from "./registry.ts"
@@ -20,8 +22,10 @@ async function snapshot(root: string) {
     const registryFile = await realpath(path.join(root, "registry.json"))
     if (!inside(root, registryFile) || !(await stat(registryFile)).isFile()) fail("INVALID_LIBRARY")
     const bytes = await readFile(registryFile)
-    const registry = registrySelection(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)))
-    return { root, registry, registryHash: hash(bytes) }
+     const metadata = parseJSON(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+     const registry = registrySelection(metadata)
+     const verified: VerifiedRegistry | undefined = metadata.schemaVersion === 2 ? metadata : undefined
+     return { root, registry, verified, registryHash: hash(bytes) }
   } catch { return fail("INVALID_LIBRARY") }
 }
 
@@ -108,7 +112,7 @@ export async function createLocalRuntime(options: { directory: string; worktree?
       return { ok: true }
     })
   }
-  const loadSkill = async (sessionID: string, id: string) => {
+  const loadSkill = async (sessionID: string, id: string, topic?: string) => {
     try {
       if (typeof sessionID !== "string" || !sessionID || sessionID === "[object Object]") fail("INVALID_CONTEXT")
       const current = await refresh()
@@ -119,10 +123,22 @@ export async function createLocalRuntime(options: { directory: string; worktree?
          if (before.root !== current.root || before.registryHash !== current.registryHash) fail("LIBRARY_CHANGED")
         const selected = Object.entries(session.packages).flatMap(([name, optional]) => [...(current.registry.packages[name]?.core ?? []), ...optional])
         if (!selected.includes(id)) fail("NOT_SELECTED")
-        const relative = current.registry.skills[id]
-        const lexical = path.resolve(current.root, relative)
-        const skillsRoot = path.join(current.root, "skills")
-        if (!inside(skillsRoot, lexical)) fail("UNSAFE_PATH")
+         const skill = current.verified?.skills[id]
+         if (topic !== undefined && (typeof topic !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(topic) || !skill || !Object.hasOwn(skill.references, topic))) fail('UNKNOWN_TOPIC')
+         const entry = topic === undefined ? skill : skill!.references[topic]
+         const relative = entry?.path ?? current.registry.skills[id]
+         const lexical = path.resolve(current.root, relative)
+         const skillsRoot = path.join(current.root, "skills")
+         if (!inside(skillsRoot, lexical)) fail("UNSAFE_PATH")
+         if (topic !== undefined) {
+           const referencesRoot = path.resolve(current.root, path.dirname(skill!.path), 'references')
+           if (!inside(referencesRoot, lexical)) fail('UNSAFE_PATH')
+           let cursor = skillsRoot
+           for (const segment of path.relative(skillsRoot, lexical).split(path.sep)) {
+             cursor = path.join(cursor, segment)
+             if ((await lstat(cursor)).isSymbolicLink()) fail('UNSAFE_PATH')
+           }
+         }
         const file = await realpath(lexical)
         if (!inside(skillsRoot, file)) fail("UNSAFE_PATH")
         const expectedFile = await stat(file)
@@ -140,7 +156,8 @@ export async function createLocalRuntime(options: { directory: string; worktree?
             if (!read.bytesRead) break
             size += read.bytesRead
           }
-          if (size > maxBytes) fail("OUTPUT_TOO_LARGE")
+           if (size > maxBytes) fail("OUTPUT_TOO_LARGE")
+           if (entry && `sha256:${hash(buffer.subarray(0, size))}` !== entry.contentHash) fail('HASH_MISMATCH')
           try { content = new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, size)) }
           catch { fail("INVALID_ENCODING") }
           const after = await handle.stat()

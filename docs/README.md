@@ -1,6 +1,18 @@
 # Trung tâm Tài liệu OpenArms (Documentation Portal)
 
+[Sprint 4.5 — install UI, deterministic PTY và KPI protocol](testing/how_to_test/Sprint_45.md),
+[ma trận nghiệm thu](reports/sprints/report_sprint_45.md): index và real50 vẫn blocked.
+
+[Sprint 4.4 — registration API và topic integrity](testing/how_to_test/Sprint_44.md):
+không TUI install hoặc Routing Index; [evidence](reports/sprints/report_sprint_44.md).
+
+[Sprint 4.3 — API-only](testing/how_to_test/Sprint_43.md): schema/service/SDK adapter,
+bounded compact/audit và transactional writer; unregistered, không full install.
+
 Chào mừng bạn đến với trung tâm tài liệu của **OpenArms** — tiện ích mở rộng (plugin) điều hướng thư viện skill cục bộ, quản trị ngữ cảnh và kiểm soát ngân sách chạy trong nền tảng **OpenCode**.
+
+[Sprint 4.2: security scanner và staged audit](testing/how_to_test/Sprint_42.md)
+thêm `/skills audit <url>` chỉ review, không cài skill. [Evidence và giới hạn](reports/sprints/report_sprint_42.md).
 
 ---
 
@@ -82,6 +94,10 @@ docs/
 ---
 
 ## 🔑 Hợp đồng Vận hành Cốt lõi Hiện tại (Living Contracts)
+
+Phase 4 có [install pipeline](testing/how_to_test/Sprint_45.md) qua audited ingestion,
+decompiler và registration. Single Library vẫn cần confirmation riêng khi đổi root;
+không auto-select/load, không Routing Index hoặc live KPI acceptance.
 
 Để tránh nhầm lẫn giữa các đề xuất trong quá khứ và tính năng đang hoạt động trong mã nguồn hiện tại, các lập trình viên cần lưu ý các tài liệu chuẩn sau:
 

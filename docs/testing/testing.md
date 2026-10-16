@@ -1,5 +1,12 @@
 # Bảng lệnh và script
 
+Decompiler/service/writer API-only, unregistered: [Sprint 4.3](how_to_test/Sprint_43.md).
+
+Foundation nhập skill API-only: [Sprint 4.1](how_to_test/Sprint_41.md).
+`/skills install` đã nối pipeline audited: [Sprint 4.5](how_to_test/Sprint_45.md).
+`/skills audit <url>` chỉ staged review, không install: [Sprint 4.2](how_to_test/Sprint_42.md).
+Offline fixtures dùng injected HTTP/DNS, không đọc thư viện hay fetch ngoài mạng.
+
 Domain-aware foundation: [Sprint 3.1 v2](how_to_test/Sprint_31v2.md)
 (classifier/router/fallback). Specialized test/linter parsers:
 [Sprint 3.2 v2](how_to_test/Sprint_32v2.md). Git diff và read/cat inspection:

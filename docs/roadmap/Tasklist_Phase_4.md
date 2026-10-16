@@ -61,7 +61,7 @@ flowchart TD
 
 **Sprint Goal:** Xây dựng cơ chế tải an toàn từ Git/GitHub URL và định tuyến chính xác giữa thư mục cấu hình OpenCode toàn cục (`$XDG_CONFIG_HOME/opencode/skills`) và thư mục dự án cục bộ (`<projectRoot>/skills`).
 
-- [ ] **TSK-401 - Overview:** Xây dựng bộ phân giải tham số và vị trí lưu trữ (Scope Resolver).  
+- [x] **TSK-401 - Overview:** Xây dựng bộ phân giải tham số và vị trí lưu trữ (Scope Resolver).
   **Details:**  
   - Định nghĩa cú pháp lệnh: `/skills install [--local | --global] <url>` (mặc định nếu không truyền option là `--local`).
   - Phân giải đường dẫn:
@@ -70,21 +70,21 @@ flowchart TD
   - Kiểm tra quyền ghi (write permissions), tạo thư mục an toàn với quyền `0700`, xử lý xung đột nếu skill cùng tên đã tồn tại (hỗ trợ cờ `--overwrite` hoặc xác nhận trên TUI).  
   *(Estimate: 1 day)*
 
-- [ ] **TSK-402 - Overview:** Triển khai Remote Git/HTTP Fetcher an toàn vào thư mục tạm.  
+- [x] **TSK-402 - Overview:** Triển khai Remote Git/HTTP Fetcher an toàn vào thư mục tạm.
   **Details:**  
   - Hỗ trợ các định dạng URL: `https://github.com/user/repo`, `https://github.com/user/repo.git`, link commit/branch cụ thể, và đường dẫn tới thư mục con trong repo (subpath).
   - Tải source bằng Git shallow clone (`--depth 1`) hoặc GitHub Tarball/Zip API vào thư mục tạm bị cô lập (`os.tmpdir()/openarms-fetch-<uuid>`).
   - Ranh giới an toàn: Áp trần kích thước tải về tối đa 10 MB, áp timeout tải 30 giây, hủy process con nếu quá thời gian. Chặn các URL nội bộ (`localhost`, `127.0.0.1`, IP private RFC 1918) để ngăn chặn tấn công SSRF (Server-Side Request Forgery).  
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-403 - Overview:** Giải nén và chuẩn hóa cấu trúc repository đầu vào (Archive & Layout Extractor).  
+- [x] **TSK-403 - Overview:** Giải nén và chuẩn hóa cấu trúc repository đầu vào (Archive & Layout Extractor).
   **Details:**  
   - Quét tìm các file tài liệu skill cốt lõi trong repo tải về theo thứ tự ưu tiên: `SKILL.md`, `README.md`, `skill.markdown`, hoặc thư mục `skills/`.
   - Triển khai Safe-Extract chống lỗ hổng Zip Slip / Tar Traversal: từ chối các file có path tuyệt đối, chứa ký tự `..`, symlink trỏ ra ngoài thư mục giải nén, hoặc file dạng FIFO/Socket/Device.
   - Thu thập toàn bộ nội dung text và tài nguyên phụ thuộc (images, examples, assets) vào một đối tượng `RawSkillPackage` có cấu trúc dữ liệu chuẩn hóa.  
   *(Estimate: 1 day)*
 
-- [ ] **TSK-404 - Overview:** Kiểm thử đơn vị cho Fetcher và Scope Resolver.  
+- [x] **TSK-404 - Overview:** Kiểm thử đơn vị cho Fetcher và Scope Resolver.
   **Details:**  
   - Viết unit tests cho Scope Resolver với các môi trường Linux/macOS, kiểm tra biến `$XDG_CONFIG_HOME` tùy biến và đường dẫn mặc định `~/.config/opencode/skills`.
   - Giả lập (mock) Git clone và HTTP archive download: kiểm tra timeout, kiểm tra chặn URL độc hại, kiểm tra từ chối tarball độc chứa `../../etc/passwd`.
@@ -97,7 +97,7 @@ flowchart TD
 
 **Sprint Goal:** Thiết lập tầng phòng ngự phân tích rủi ro độc hại, phát hiện mã lệnh nguy hiểm và các mẫu Prompt Injection ngầm trước khi cho phép xử lý nội dung skill.
 
-- [ ] **TSK-405 - Overview:** Xây dựng bộ quy tắc phát hiện Prompt Injection chuyên dụng cho Skill (Injection Rules Engine).  
+- [x] **TSK-405 - Overview:** Xây dựng bộ quy tắc phát hiện Prompt Injection chuyên dụng cho Skill (Injection Rules Engine).
   **Details:**  
   - Thiết lập bộ matcher quy tắc dựa trên regex chuẩn hóa và phân tích heuristic đối với nội dung văn bản của skill:
     - **Jailbreak / System Override:** Các mẫu như *"Ignore previous instructions"*, *"System prompt reset"*, *"You are now in developer mode"*, *"Disregard safety guidelines"*.
@@ -106,7 +106,7 @@ flowchart TD
   - Phân loại mức độ nghiêm trọng: `LOW` (cảnh báo gợi ý), `MEDIUM` (yêu cầu xác nhận), `HIGH` / `CRITICAL` (chặn tự động).  
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-406 - Overview:** Phân tích mã nguồn và shell scripts đi kèm skill (Executable & Script Audit).  
+- [x] **TSK-406 - Overview:** Phân tích mã nguồn và shell scripts đi kèm skill (Executable & Script Audit).
   **Details:**  
   - Nếu package skill chứa các file script (Python, Bash, Node.js trong thư mục `scripts/` hoặc `bin/`):
     - Quét tìm các lệnh gọi mạng không an toàn, obfuscated code (Base64 decode & eval), truy cập file ngoài thư mục skill.
@@ -114,20 +114,26 @@ flowchart TD
   - Xuất báo cáo kiểm tra an toàn `SecurityAuditReport` gồm danh sách file đã duyệt, các rule vi phạm và khuyến nghị an toàn.  
   *(Estimate: 1 day)*
 
-- [ ] **TSK-407 - Overview:** Tích hợp Modal cảnh báo an toàn trên OpenCode TUI.  
+- [x] **TSK-407 - Overview:** Tích hợp Modal cảnh báo an toàn trên OpenCode TUI.
   **Details:**  
   - Khi phát hiện rủi ro mức độ `MEDIUM` hoặc `HIGH`:
     - Tạm dừng luồng cài đặt, kích hoạt dialog tương tác trong OpenCode TUI qua `api.ui.dialog`.
     - Hiển thị rõ: Nguồn gốc repo, mức độ rủi ro, dòng văn bản nghi vấn chứa Prompt Injection.
-    - Cung cấp 2 lựa chọn: **Cancel (Mặc định)** để hủy và xóa ngay lập tức; hoặc **Force Install** (chỉ dành cho lập trình viên chấp nhận rủi ro, ghi log audit có gắn nhãn).  
+     - **HIGH/CRITICAL chặn cứng, không Force**. MEDIUM: **Cancel (Mặc định)** hoặc **Continue despite risk (audit only)**; phải ghi audit fingerprint-bound thành công. Esc/đóng/timeout/lỗi đều denied. Không cấp quyền install/registry/load.
+     - Production `/skills audit <url>` chỉ staged review và cleanup; actual synthetic PTY đã đạt năm cases MEDIUM default/Esc/override và HIGH/CRITICAL hardblock. Audit event chỉ là risk-choice intent, không authorization; xem [Sprint 4.2](../testing/how_to_test/Sprint_42.md).
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-408 - Overview:** Bộ kiểm thử bảo mật độc lập (Security Corpus Tests).  
+- [x] **TSK-408 - Overview:** Bộ kiểm thử bảo mật độc lập (Security Corpus Tests).
   **Details:**  
   - Xây dựng kho fixture kiểm thử chứa các mẫu prompt injection thực tế, repo chứa script độc hại giả lập, và các skill hợp lệ chuẩn mực.
   - Kiểm tra tỷ lệ phát hiện (True Positive) đạt 100% trên corpus mã độc đã biết; kiểm tra tỷ lệ báo nhầm (False Positive) trên các skill kỹ thuật chính thống dưới 2%.
-  - Đảm bảo quy trình quét an toàn chạy thuần túy offline, không làm rò rỉ nội dung file ra ngoài internet.  
-  *(Estimate: 1 day)*
+   - Đảm bảo quy trình quét an toàn chạy thuần túy offline, không làm rò rỉ nội dung file ra ngoài internet.
+   *(Estimate: 1 day)*
+
+   **Evidence scoped:** scanner/script audit và corpus authored offline đã có tests;
+   18/18 TP, 0/52 decision FP không phải bảo đảm trên mọi skill. TSK-407 có production
+   staged-only gateway đã đạt actual synthetic PTY acceptance; không phải full install.
+   [Báo cáo và giới hạn](../reports/sprints/report_sprint_42.md).
 
 ---
 
@@ -135,7 +141,7 @@ flowchart TD
 
 **Sprint Goal:** Xây dựng pipeline AI tự động phân rã file skill nguyên khối thành kiến trúc 2 tầng chuẩn mực của OpenArms: Tầng 1 (Core Interface & Wiki Map) và Tầng 2 (References chuyên sâu).
 
-- [ ] **TSK-409 - Overview:** Thiết kế Prompt và Schema chuẩn hóa cho AI Skill Decompiler.  
+- [x] **TSK-409 - Overview:** Thiết kế Prompt và Schema chuẩn hóa cho AI Skill Decompiler.
   **Details:**  
   - Định nghĩa hợp đồng TypeScript và JSON Schema cho kết quả phân rã của LLM:
     ```typescript
@@ -156,21 +162,21 @@ flowchart TD
     - Sinh các Markdown Wiki Links chuẩn mực trong `SKILL.md` để Agent có thể điều hướng tự nhiên: `[Topic Title]` `(references/<id>.md)`.  
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-410 - Overview:** Triển khai Decompiler Service với Model Adapter siêu nhẹ.  
+- [x] **TSK-410 - Overview:** Triển khai Decompiler Service với Model Adapter siêu nhẹ.
   **Details:**  
   - Tích hợp với API provider hiện có của OpenCode (hỗ trợ sử dụng model nhẹ, nhanh, chi phí siêu rẻ như Gemini Flash hoặc Claude Haiku).
   - Sử dụng chế độ **Structured Outputs (JSON mode)** để đảm bảo kết quả trả về parse được 100%, không bị lỗi markdown formatting.
   - Xử lý trường hợp file đầu vào quá lớn (> 30.000 tokens): tự động chia phần (chunking có overlap) hoặc trích xuất outline trước khi phân rã chi tiết.  
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-411 - Overview:** Bộ thẩm định tính toàn vẹn ngữ nghĩa sau khi phân rã (Semantic Consistency Validator).  
+- [x] **TSK-411 - Overview:** Bộ thẩm định tính toàn vẹn ngữ nghĩa sau khi phân rã (Semantic Consistency Validator).
   **Details:**  
   - So sánh đối chiếu nội dung trước và sau khi phân rã: đảm bảo các quy tắc cốt lõi, cấm kỵ (invariants/constraints) của tác giả gốc không bị AI lược bỏ hoặc biến dạng ý nghĩa.
   - Kiểm tra ranh giới dung lượng: nếu Tầng 1 vượt quá 1.000 tokens, tự động kích hoạt lượt compact thứ hai để nén nhỏ lại.
   - Kiểm tra tính hợp lệ của các liên kết Wiki: đảm bảo 100% các link `references/*.md` được nhắc tới trong Tầng 1 đều có file tương ứng tồn tại trong mảng `references`.  
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-412 - Overview:** Trình ghi cấu trúc đĩa (2-Tier Disk Writer Engine).  
+- [x] **TSK-412 - Overview:** Trình ghi cấu trúc đĩa (2-Tier Disk Writer Engine).
   **Details:**  
   - Ghi file nguyên tử (atomic write qua temporary file + rename):
     - `<targetRoot>/skills/<skill-id>/SKILL.md` (Tầng 1)
@@ -179,7 +185,7 @@ flowchart TD
   - Thiết lập quyền file an toàn `0600` và thư mục `0700`.  
   *(Estimate: 1 day)*
 
-- [ ] **TSK-413 - Overview:** Kiểm thử tự động quá trình Decompile & Tái cấu trúc Wiki.  
+- [x] **TSK-413 - Overview:** Kiểm thử tự động quá trình Decompile & Tái cấu trúc Wiki.
   **Details:**  
   - Viết test suite chuyển đổi thực tế trên các bộ skill nổi tiếng: Superpower, AWS Review, Technical Writing.
   - Đo lường dung lượng token trước và sau: khẳng định Tầng 1 luôn < 800 tokens và tổng lượng token nạp ở lượt đầu tiên giảm tối thiểu 60%.
@@ -190,9 +196,17 @@ flowchart TD
 
 ### Sprint 4.4: Tích hợp Registry, SHA-256 & Runtime Tooling
 
+Sprint 4.3 evidence scope: API-only service/SDK adapter/writer, synthetic authored
+workflow/cloud/docs và mocked provider (không actual named corpus). Selected model
+giữ nguyên caller, không tự chọn cheap model. Compact proactive ở >=800, default
+estimate UTF8 bytes; literal evidence không semantic proof. Writer chỉ unregistered,
+không registry/load/TUI install. SDK không bảo đảm host-context isolation hay billing
+cap; owner-controlled filesystem, không hostile external rename protection.
+[Runbook và verification](../testing/how_to_test/Sprint_43.md).
+
 **Sprint Goal:** Tự động hóa việc cập nhật `registry.json`, sinh mã băm SHA-256 bảo mật, mở rộng System Prompt Index và nâng cấp tool `load_skill` hỗ trợ nạp theo 2 tầng.
 
-- [ ] **TSK-414 - Overview:** Bộ sinh mã băm SHA-256 và cập nhật Registry nguyên tử.  
+- [x] **TSK-414 - Overview:** Bộ sinh mã băm SHA-256 và cập nhật Registry nguyên tử.
   **Details:**  
   - Tính toán mã SHA-256 trên buffer byte của từng file sinh ra (`SKILL.md` và các file `references/*.md`).
   - Mở file `registry.json` của target tương ứng (Global hoặc Local) dưới khóa độc quyền (`.registry-lock`):
@@ -213,7 +227,8 @@ flowchart TD
     - Ghi lại bằng atomic rename và fsync để chống hỏng file nếu mất điện/crash.  
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-415 - Overview:** Nâng cấp System Prompt với bảng chỉ mục kỹ năng (Routing Index).  
+- [ ] **TSK-415 - Overview:** Nâng cấp System Prompt với bảng chỉ mục kỹ năng (Routing Index).
+  **Deferred:** để triển khai sau; yêu cầu và Sprint 4.5 index acceptance vẫn chưa đạt.
   **Details:**  
   - Cập nhật hàm `buildInstruction` trong [`src/local-library.ts`](file:///home/hodangthaiduy/Workspace/Extensions/OpenArms/src/local-library.ts):
     - Thay vì chỉ in ID trần, tự động sinh bảng chỉ mục ngắn gọn (Index Table) từ trường `description` của các skill đang ở trạng thái `Selected`:
@@ -226,7 +241,7 @@ flowchart TD
     - Giữ trần dung lượng của toàn bộ bảng chỉ mục này dưới 300 tokens để bảo toàn context.  
   *(Estimate: 1 day)*
 
-- [ ] **TSK-416 - Overview:** Nâng cấp Tool `load_skill` hỗ trợ tham số Topic / Reference con.  
+- [x] **TSK-416 - Overview:** Nâng cấp Tool `load_skill` hỗ trợ tham số Topic / Reference con.
   **Details:**  
   - Mở rộng schema của tool `load_skill` trong [`plugins/skill-router-server.ts`](file:///home/hodangthaiduy/Workspace/Extensions/OpenArms/plugins/skill-router-server.ts) và core [`src/local-library.ts`](file:///home/hodangthaiduy/Workspace/Extensions/OpenArms/src/local-library.ts):
     ```typescript
@@ -239,7 +254,7 @@ flowchart TD
   - Kiểm tra mã băm SHA-256 ngay trên buffer byte trước khi trả về cho model; cập nhật trạng thái `Loaded` và lịch sử nạp `loadHistory`.  
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-417 - Overview:** Kiểm thử tính tương thích ngược và toàn vẹn dữ liệu Registry.  
+- [x] **TSK-417 - Overview:** Kiểm thử tính tương thích ngược và toàn vẹn dữ liệu Registry.
   **Details:**  
   - Kiểm tra việc nạp các skill v1 cũ không có references vẫn hoạt động bình thường 100% không bị lỗi.
   - Kiểm tra concurrency: hai lệnh install chạy đồng thời trên cùng một máy không làm đè dữ liệu hoặc hỏng file `registry.json`.
@@ -248,11 +263,24 @@ flowchart TD
 
 ---
 
+Sprint 4.4 evidence: API-only audited registration, existing hash-bearing v2 schema
+(references objects, không string paths như sketch trên); legacy v1 core load vẫn
+unhashed, v1 registration không auto-migrate. Full293/293, synthetic runtime5/5;
+không actual TUI install hoặc Routing Index. [Runbook](../testing/how_to_test/Sprint_44.md)
+và [giới hạn/evidence](../reports/sprints/report_sprint_44.md).
+
 ### Sprint 4.5: Kiểm thử tích hợp, Sandbox PTY & Nghiệm thu
 
 **Sprint Goal:** Kiểm chứng toàn bộ quy trình từ gõ lệnh trên TUI, clone repo, quét an toàn, decompile, ghi file đến sử dụng skill trong môi trường Docker Sandbox PTY thật.
 
-- [ ] **TSK-418 - Overview:** Tích hợp giao diện điều khiển trên OpenCode TUI (`/skills install`).  
+Implementation update: TSK418 đã nối audited pipeline và explicit model/send/write/
+library-switch consent; TSK419 có deterministic Docker PTY local/global, cancel,
+hardblock và provider failure trên authored fixtures. Verification hiện hành và
+ranh giới synthetic-vs-live ở [report Sprint45](../reports/sprints/report_sprint_45.md).
+TSK419 autonomous routing vẫn không được suy ra từ explicit fixture topic load.
+TSK415 deferred và TSK420 real50 vẫn chặn Phase4 acceptance.
+
+- [x] **TSK-418 - Overview:** Tích hợp giao diện điều khiển trên OpenCode TUI (`/skills install`).  
   **Details:**  
   - Bổ sung lệnh `/skills install` vào bảng lệnh slash commands của OpenCode TUI.
   - Hỗ trợ nhập URL tương tác qua Input Dialog hoặc truyền trực tiếp trên thanh command: `/skills install --global https://github.com/user/my-skill`.
@@ -261,6 +289,9 @@ flowchart TD
   *(Estimate: 1.5 days)*
 
 - [ ] **TSK-419 - Overview:** Kịch bản kiểm thử tự động trên Docker Sandbox PTY (Real Terminal Test).  
+  **Partial verified:** deterministic local/global install, cancel/security/provider
+  failure và explicit core/topic load đã pass Docker PTY; autonomous model routing
+  không claim. Synthetic provider không chứng minh live model behavior.
   **Details:**  
   - Mở rộng harness `sandbox/tui-smoke.py` và runner `scripts/arms-test.mjs`:
     - Khởi động OpenCode TUI trong container Docker thật.

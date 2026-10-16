@@ -8,6 +8,9 @@ Thư mục này lưu trữ báo cáo nghiệm thu và đánh giá kết quả th
 
 | Sprint | File Báo cáo | Trọng tâm Sprint | Kịch bản Kiểm thử tương ứng |
 |---|---|---|---|
+| **Sprint 4.3 — API-only** | [`report_sprint_43.md`](report_sprint_43.md) | Decompiler/service/SDK mocks/transactional writer; không registry/full install | [`Sprint 4.3`](../../testing/how_to_test/Sprint_43.md) |
+| **Sprint 4.2** | [`report_sprint_42.md`](report_sprint_42.md) | Offline scanner/staged approval; host acceptance ghi rõ pending | [`Sprint 4.2`](../../testing/how_to_test/Sprint_42.md) |
+| **Sprint 4.1** | [`report_sprint_41.md`](report_sprint_41.md) | Staged ingestion API/offline security, chưa end-to-end install | [`Sprint 4.1`](../../testing/how_to_test/Sprint_41.md) |
 | **Sprint 0.1–0.3** | [`report_sprint_01_02_03.md`](report_sprint_01_02_03.md) | Phân tầng test T0-T3, fingerprint cache, unified runner | [`Sprint 0.1`](../../testing/how_to_test/Sprint_01.md)–[`0.3`](../../testing/how_to_test/Sprint_03.md) |
 | **Sprint 0.4** | [`report_sprint_04.md`](report_sprint_04.md) | Triển khai thực tế, baseline quan sát | [`Sprint 0.4`](../../testing/how_to_test/Sprint_04.md) |
 | **Sprint 1.1** | [`report_sprint_11.md`](report_sprint_11.md) | Hợp đồng kiểm thử & manifest thực tế | [`Sprint 1.1`](../../testing/how_to_test/Sprint_11.md) |
