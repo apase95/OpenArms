@@ -106,7 +106,7 @@ export function createPlan(files, options) {
     else if (mode === "related" && related.length && !full) { status = "required"; reason = "RELATED_TESTS" }
     else if (mode === "related" && full) reason = "COVERED_BY_FULL"
     else if (mode === "full" && full) { status = "required"; reason = options["pre-push"] ? "PRE_PUSH_VALIDATION" : "SHARED_OR_INFRASTRUCTURE" }
-    else if (smoke.has(mode)) { status = "required"; reason = "INTEGRATION_BOUNDARY" }
+    else if (smoke.has(mode)) reason = "LEGACY_SMOKE_EXPLICIT_ONLY"
     if (mode === "related" && options.mode === "related" && unknown) { status = "blocked"; reason = "NEEDS_REVIEW" }
     if (mode === "related" && options.mode === "related" && !unknown && !related.length) { status = "skipped"; reason = "NO_RELATED_TESTS" }
     if (override && ["smoke-runtime", "tui-smoke"].includes(options.mode) && mode === "smoke-static") { status = "required"; reason = "STATIC_PREREQUISITE" }

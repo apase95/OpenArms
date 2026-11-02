@@ -11,8 +11,9 @@ Run checks from the repository root through `node scripts/arms-test.mjs`.
    the plan explicitly. Run T1 at most once for an unchanged code/test revision.
    Full covers T1: do not run both `related` and `full` for the same revision.
 3. Full tests are justified by shared/core or test infrastructure changes, or an
-   explicit user request. Smoke is justified only by the integration rules in
-   `scripts/test-policy.json`. Do not add sandbox/TUI checks to server-only tasks.
+   explicit user request. Verify/pre-push are host-only. Sandbox/TUI smoke is
+   reference-only and runs solely through an explicitly requested smoke mode;
+   integration classifications do not schedule it automatically.
 4. `needs-review` is a configuration error: add a reviewed mapping and related
    tests before verification. Never resolve unknown files by silently running all
    modes, or by omitting an affected file from the changed-file list.
@@ -30,7 +31,8 @@ Run checks from the repository root through `node scripts/arms-test.mjs`.
 
 Do not install Git hooks or change global configuration automatically. See
 `docs/testing/testing.md` for opt-in CI/pre-push commands and baseline collection.
-Opt in before push with `npm run test:pre-push -- --base <revision>`: full plus
-classifier-required smoke in one invocation. CI sets `CI=true` to distrust local
-stamps. Missing required Docker/Python/PTY blocks validation. Record real tasks
+Opt in before push with `npm run test:pre-push -- --base <revision>`: host full
+tests in one invocation. CI sets `CI=true` to distrust local smoke stamps only
+when smoke is explicitly requested. Docker/Python/PTY are not host-check requirements.
+Missing capabilities block an explicit smoke request, not host verification. Record real tasks
 with `--task <task-id>`; review rollout using `npm run test:acceptance`.
