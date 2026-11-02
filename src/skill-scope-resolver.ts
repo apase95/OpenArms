@@ -38,11 +38,13 @@ function absolute(value: string) {
 }
 
 /** Pure path resolution. Empty XDG follows the XDG fallback convention. */
-export function resolveSkillScope(options: { projectRoot: string; skillName: string; scope?: InstallScope; overwrite?: boolean; env?: Record<string, string | undefined>; home?: string }): ScopePlan {
+export function resolveSkillScope(options: { projectRoot: string; skillName: string; scope?: InstallScope; overwrite?: boolean; env?: Record<string, string | undefined>; home?: string; catalog?: boolean }): ScopePlan {
   const scope = options.scope ?? "local"
   if (scope !== "local" && scope !== "global") throw Error("Invalid install scope")
   const root = scope === "local" ? absolute(options.projectRoot) : path.join(absolute((options.env ?? process.env).XDG_CONFIG_HOME || path.join(absolute(options.home ?? homedir()), ".config")), "opencode")
-  return Object.freeze({ scope, base: path.join(root, "skills"), target: path.join(root, "skills", safeSkillName(options.skillName)), registry: path.join(root, "registry.json"), overwrite: options.overwrite === true })
+  const directory = options.catalog && scope === 'local' ? path.join(root, '.openarms') : root
+  const base = path.join(directory, options.catalog ? 'packages' : 'skills')
+  return Object.freeze({ scope, base, target: path.join(base, safeSkillName(options.skillName)), registry: path.join(directory, "registry.json"), overwrite: options.overwrite === true })
 }
 
 async function inspect(file: string) {

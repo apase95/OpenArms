@@ -94,7 +94,7 @@ async function hostFixture(run: (f: any) => Promise<void>) {
   }
 }
 
-test("active local adapter child starts empty and requires its own selection; parent unchanged", async () => hostFixture(async ({ root, registry, adapter }) => {
+test("active local adapter children share project toggles without inheriting grants or locks", async () => hostFixture(async ({ root, registry, adapter }) => {
   await mkdir(path.join(root, "skills"))
   for (const id of ["example", "extra"]) {
     await mkdir(path.join(root, "skills", id))
@@ -102,24 +102,26 @@ test("active local adapter child starts empty and requires its own selection; pa
     registry.skills[id].path = `skills/${id}/interface.txt`
   }
   await writeFile(path.join(root, "registry.json"), JSON.stringify(registry))
+  await mkdir(path.join(root, 'demo'))
+  await writeFile(path.join(root, 'demo/package.json'), JSON.stringify({ skills: { extra: 'extra.txt' } }))
+  await writeFile(path.join(root, 'demo/extra.txt'), 'Synthetic extra')
   const runtime = await createLocalRuntime({ directory: root })
   const config = await runtime.configureLibrary(root, "unset", true)
-  await runtime.selectPackage("parent", "demo", ["extra"], config.revision)
-  await runtime.loadSkill("parent", "example")
+  await runtime.selectPackage("parent", "demo", ["demo/extra"], config.revision)
   const parent = await runtime.store.getSession(root, "parent")
   await Promise.all(["c1", "c2"].map(id => adapter.event({ event: { type: "session.created", properties: { info: { id, parentID: "parent" } } } })))
   for (const id of ["c1", "c2"]) {
     const child = await runtime.store.getSession(root, id)
-    assert.deepEqual(child.packages, {}); assert.equal(child.taskPackage, undefined); assert.equal(child.taskSession, undefined)
-    assert.equal(JSON.parse(await adapter.tool.load_skill.execute({ skill: "extra" }, { sessionID: id })).error.code, "NOT_SELECTED")
-    await runtime.selectPackage(id, "demo", ["extra"], config.revision)
-    assert.equal(JSON.parse(await adapter.tool.load_skill.execute({ skill: "extra" }, { sessionID: id })).ok, true)
+    assert.deepEqual(child.packages, { demo: ['demo/extra'] }); assert.equal(child.taskPackage, undefined); assert.equal(child.taskSession, undefined)
+    const output = { system: [] }
+    await adapter['experimental.chat.system.transform']({ sessionID: id }, output)
+    assert.match(output.system.join('\n'), /Synthetic extra/)
   }
-  assert.equal(JSON.parse(await adapter.tool.load_skill.execute({ skill: "extra" }, { sessionID: "c1" })).ok, true)
+  assert.equal(adapter.tool.load_skill, undefined)
   assert.deepEqual(await runtime.store.getSession(root, "parent"), parent)
 }))
 
-test("metadata roots automatically select after server creation without copying session authority", async () => hostFixture(async ({ root, registry, runtime, adapter }) => {
+test("legacy metadata roots restore selection without copying session authority", async () => hostFixture(async ({ root, registry, runtime, adapter }) => {
   await runtime.store.setPackage(root, "origin", "demo", ["extra"])
   await runtime.grantVerifiedSkill({ skill: "example" }, { sessionID: "origin" }, "session")
   await runtime.grantVerifiedSkill({ skill: "extra" }, { sessionID: "origin" }, "project")
@@ -129,7 +131,6 @@ test("metadata roots automatically select after server creation without copying 
   const parent = await runtime.store.getSession(root, "origin")
   for (const yes of [false, true]) {
     const id = yes ? "yes" : "no"
-    await adapter.event({ event: { type: "session.created", properties: { info: { id } } } })
     const restored = await initializeSession({ projectRoot: root, sessionID: id, store: runtime.store })
     assert.deepEqual(restored.packages, { demo: ["extra"] })
     assert.equal(restored.taskPackage, undefined); assert.equal(restored.taskLoadedSkills, undefined); assert.deepEqual(restored.approvedMismatch, [])

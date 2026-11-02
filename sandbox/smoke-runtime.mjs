@@ -93,10 +93,11 @@ try {
   assert.equal(config.permission.skill["*"], "deny")
   assert.equal(config.permission.read["*SKILL.md"], "deny")
   const tools = await get("/experimental/tool/ids")
-    assert.ok(tools.includes("load_skill"), `Server plugin did not register load_skill; registered=${JSON.stringify(tools)}`)
+    assert.ok(tools.includes("openarms_usage"), `Server plugin did not register usage tool; registered=${JSON.stringify(tools)}`)
+    assert.ok(!tools.includes("load_skill"), "Model-facing loader must not be exposed")
    assert.ok(!tools.includes("load_verified_skill"), "Legacy verified loader must not be exposed")
   assert.ok(!tools.includes("load_skill_package"), "Legacy tool must be removed")
-   console.log("PASS: runtime binary version, effective isolated paths/config, server health and sole local loader registration checks=5")
+   console.log("PASS: runtime binary version, effective isolated paths/config, server health and automatic-injection tool inventory checks=5")
 } catch (error) {
   console.error(output.sample())
   console.error(error.stack)

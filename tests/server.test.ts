@@ -9,28 +9,36 @@ import { governanceHooks } from "../src/governance-hooks.ts"
 import { createLocalRuntime } from "../src/local-library.ts"
 import { SkillRouterServer } from "../plugins/skill-router-server.ts"
 
-test("active adapter exposes only selected-ID local loading and refreshes a shared source", async () => {
+test("active adapter automatically injects project toggles without a model-facing loader", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "arms-adapter-local-"))
   const previous = process.env.XDG_STATE_HOME
   try {
     process.env.XDG_STATE_HOME = path.join(root, "state")
-    await mkdir(path.join(root, "skills"))
-    await writeFile(path.join(root, "skills/example.md"), "synthetic adapter content")
-    await writeFile(path.join(root, "registry.json"), JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: [], detect: {} } }, skills: { example: "skills/example.md" } }))
+    await mkdir(path.join(root, "demo"))
+    await writeFile(path.join(root, "demo/example.md"), "synthetic adapter content")
+    await writeFile(path.join(root, "demo/package.json"), JSON.stringify({ skills: { example: 'example.md' } }))
     const adapter = await SkillRouterServer({ directory: root, worktree: root } as any)
-    assert.deepEqual(Object.keys(adapter.tool!).sort(), ["load_skill", "openarms_usage"])
-    const load = (args: any) => adapter.tool!.load_skill.execute(args, { sessionID: "s" } as any).then(JSON.parse)
-    assert.equal((await load({ skill: "example" })).error.code, "NOT_CONFIGURED")
+    // Guard the event wiring before exercising it: never touch the host database.
+    const source = await readFile(new URL('../plugins/skill-router-server.ts', import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /autoPrune|auto-prune/)
+    await adapter.event!({ event: { type: 'session.created', properties: { info: { id: 'created' } } } } as any)
+    const initialized = await createLocalRuntime({ directory: root })
+    assert.ok((await readFile(initialized.stateFile, 'utf8')).includes('created'))
+    const beforeUnrelated = await readFile(initialized.stateFile, 'utf8')
+    await adapter.event!({ event: { type: 'session.updated', properties: { info: { id: 'ignored' } } } } as any)
+    assert.equal(await readFile(initialized.stateFile, 'utf8'), beforeUnrelated)
+    assert.deepEqual(Object.keys(adapter.tool!).sort(), ["openarms_usage"])
     const runtime = await createLocalRuntime({ directory: root })
-    const config = await runtime.configureLibrary(root, "unset", true)
-    await runtime.selectPackage("s", "demo", [], config.revision)
-    assert.equal((await load({ skill: "example" })).content, "synthetic adapter content")
-    assert.equal((await load({ skill: "example", path: "skills/example.md" })).error.code, "INVALID_REQUEST")
+    const config = await runtime.configureLibrary(root, (await runtime.getLibrary()).revision, true)
+    await runtime.selectPackage("s", "demo", ['demo/example'], config.revision)
     const output = { system: [] as string[] }
     await adapter["experimental.chat.system.transform"]!({ sessionID: "s" } as any, output)
-    assert.match(output.system.join("\n"), /example.*load_skill/)
+    assert.match(output.system.join("\n"), /synthetic adapter content/)
+    assert.doesNotMatch(output.system.join("\n"), /load_skill/)
     await runtime.configureLibrary(root, config.revision, true)
-    assert.equal((await load({ skill: "example" })).error.code, "NOT_SELECTED")
+    const next = { system: [] as string[] }
+    await adapter["experimental.chat.system.transform"]!({ sessionID: "s" } as any, next)
+    assert.doesNotMatch(next.system.join('\n'), /synthetic adapter content/)
   } finally {
     if (previous === undefined) delete process.env.XDG_STATE_HOME
     else process.env.XDG_STATE_HOME = previous

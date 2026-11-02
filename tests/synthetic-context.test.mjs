@@ -5,10 +5,12 @@ import { contextBytes, contextInputs, syntheticDigest } from '../scripts/synthet
 import { commandFor } from '../scripts/arms-test.mjs'
 import path from 'node:path'
 
-test('synthetic host inventory includes every default domain compactor', () => {
+test('synthetic host inventory includes every default domain compactor and rotation module', () => {
   for (const name of ['test', 'linter', 'git-diff', 'file-inspection', 'build']) {
     assert.ok(contextInputs.includes(`src/${name}-output-compactor.ts`.replace('file-inspection-output', 'file-inspection')), name)
   }
+  assert.ok(contextInputs.includes('src/auto-session-rotator.ts'), 'auto-session-rotator')
+  assert.ok(contextInputs.includes('src/progressive-rotation.ts'), 'progressive-rotation')
 })
 
 test('synthetic runtime is explicit and forwarded in parsed options', () => {

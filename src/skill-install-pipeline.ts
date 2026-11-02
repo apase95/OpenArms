@@ -24,13 +24,13 @@ export async function installSkill(input: string, options: {
     const review = { ...options.ui, choose: async (...args: Parameters<AuditReviewUI['choose']>) => { check(); const answer = await options.ui.choose(...args); check(); return answer } }
     const draft = await decompileSkillPackage(raw, { selectedModel, adapter: { ...options.adapter, generate: call => { check(); options.progress('[3/4] AI Restructuring...'); return options.adapter.generate(call) } }, callerAuditReviewUI: review, signal: options.signal })
     check()
-    const plan = resolveSkillScope({ projectRoot: options.projectRoot, skillName: draft.skill.id, scope: command.scope, overwrite: command.overwrite, env: options.env })
+    const plan = resolveSkillScope({ projectRoot: options.projectRoot, skillName: draft.skill.id, scope: command.scope, overwrite: command.overwrite, env: options.env, catalog: true })
     const result = await registerDecompiledSkill(raw, draft, { scopePlan: plan, callerAuditReviewUI: review, confirmWrite: async request => {
       check()
       const allowed = await options.ui.choose('Install verified skill?', `Target: ${request.target}\nRegistry: ${plan.registry}\nOverwrite: ${plan.overwrite}\nSource fingerprint: ${request.fingerprint}\nFiles: ${request.files.join(', ')}\nThis writes and registers only. No automatic library switch, selection or load.`, 'Install', 'Cancel')
       check(); return allowed
     } })
     options.progress('[4/4] Verified!')
-    return Object.freeze({ id: draft.skill.id, root: path.dirname(plan.registry), registry: plan.registry, target: result.target, references: draft.skill.references.length, coreEstimate: draft.report.coreEstimate, estimator: draft.report.estimator, model: selectedModel })
+    return Object.freeze({ id: draft.skill.id, root: plan.base, registry: plan.registry, target: result.target, references: draft.skill.references.length, coreEstimate: draft.report.coreEstimate, estimator: draft.report.estimator, model: selectedModel })
   }, options.fetchSeams)
 }

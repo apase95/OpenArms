@@ -46,6 +46,9 @@ export async function writeDecompiledSkill(raw: RawSkillPackage, draft: Validate
     if (path.basename(plan.target) !== skill.id || plan.target !== path.join(plan.base, skill.id)) fail('TARGET')
     if (draft.assets.length !== raw.assets.length || raw.assets.some(a => !draft.assets.some(m => m.path === a.path && m.bytes === a.bytes.length && m.sha256 === hash(a.bytes)))) fail('ASSETS')
     const files = [{ path: 'SKILL.md', bytes: Buffer.from(skill.coreInterface) }, ...skill.references.map(r => ({ path: `references/${r.id}.md`, bytes: Buffer.from(`${r.title}\n${r.content}`) })), ...raw.assets.map(a => ({ path: a.path, bytes: Buffer.from(a.bytes) }))]
+    // Publish the runtime manifest in the same staged directory transaction.
+    // Legacy registry metadata remains an audited export, not runtime authority.
+    if (options.register) files.push({ path: 'package.json', bytes: Buffer.from(JSON.stringify({ skills: { main: 'SKILL.md', ...Object.fromEntries(skill.references.map(ref => [`reference-${ref.id}`, `references/${ref.id}.md`])) } }) + '\n') })
     const seen = new Set<string>()
     for (const file of files) { safe(file.path); const key = file.path.toLowerCase(); if (seen.has(key)) fail('COLLISION'); seen.add(key) }
     for (const key of seen) { const parts = key.split('/'); parts.pop(); while (parts.length) { if (seen.has(parts.join('/'))) fail('COLLISION'); parts.pop() } }
@@ -80,7 +83,7 @@ export async function writeDecompiledSkill(raw: RawSkillPackage, draft: Validate
       if (Object.hasOwn(registry!.skills, id)) {
         if (!plan.overwrite || registry!.skills[id].owner !== id || registry!.packages[id]?.core.join(',') !== id || registry!.packages[id]?.optional.length) fail('REGISTRY_CONFLICT')
       } else if (Object.hasOwn(registry!.packages, id)) fail('REGISTRY_CONFLICT')
-      const entry = (file: { path: string; bytes: Buffer }) => ({ path: `skills/${id}/${file.path}`, contentHash: `sha256:${hash(file.bytes)}` as const, maxTokens: Math.max(1, file.bytes.length) })
+      const entry = (file: { path: string; bytes: Buffer }) => ({ path: `${path.relative(path.dirname(plan.registry), plan.target).split(path.sep).join('/')}/${file.path}`, contentHash: `sha256:${hash(file.bytes)}` as const, maxTokens: Math.max(1, file.bytes.length) })
       registry!.packages[id] = { core: [id], optional: [], detect: { files: [], extensions: [], dependencies: [] } }
       registry!.skills[id] = { ...entry(files[0]), owner: id, kind: 'core', defaultPermission: 'ask', workflows: {}, references: Object.fromEntries(draft.skill.references.map(ref => [ref.id, entry(files.find(file => file.path === `references/${ref.id}.md`)!)])) }
       validateRegistry(registry)

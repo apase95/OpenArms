@@ -6,13 +6,10 @@ import { createServer } from "node:http"
 const config = path.join(process.env.XDG_CONFIG_HOME, "opencode")
 // Generated ordinary test data only; never configure or read the installed library.
 for (const root of ["/tmp/openarms-pty-library", "/tmp/openarms-pty-other"]) {
-  await mkdir(path.join(root, "skills"), { recursive: true })
-  await writeFile(path.join(root, "skills/example.md"), "Synthetic PTY example, not an enabled skill.")
-  await writeFile(path.join(root, "skills/editor.md"), "Synthetic PTY editor, not an enabled skill.")
-  await writeFile(path.join(root, "registry.json"), JSON.stringify({ version: 1,
-    packages: { docs: { core: ["example"], optional: ["docs-editor"], detect: {} } },
-    skills: { example: "skills/example.md", "docs-editor": "skills/editor.md" },
-  }))
+  await mkdir(path.join(root, "docs"), { recursive: true })
+  await writeFile(path.join(root, "docs/example.md"), "Synthetic PTY example, not an enabled skill.")
+  await writeFile(path.join(root, "docs/editor.md"), "Synthetic PTY editor, not an enabled skill.")
+  await writeFile(path.join(root, "docs/package.json"), JSON.stringify({ skills: { example: 'example.md', 'docs-editor': 'editor.md' } }))
 }
 await mkdir(config, { recursive: true })
 // Real processes in the disposable project; test reporter format is synthetic,

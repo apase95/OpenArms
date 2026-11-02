@@ -14,23 +14,27 @@ export async function executeLocalSkillsCommand(runtime: Awaited<ReturnType<type
     throw new Error(config.root ? "INVALID_LIBRARY" : "NOT_CONFIGURED")
   }
   if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new Error("LIBRARY_CHANGED")
-  const session = await runtime.store.getSession(runtime.projectRoot, sessionID)
+  const enabled = await runtime.store.getLastSelection(runtime.projectRoot)
   if (["status", "inspect", "list"].includes(command.action)) {
-    const names = command.action === "list" ? [command.packageName] : orderedPackageNames(current.registry).filter(name => Object.hasOwn(session?.packages ?? {}, name))
+    const names = command.action === "list" ? [command.packageName] : [...new Set([...orderedPackageNames(current.registry), ...Object.keys(enabled)])]
     const rows: string[] = []
     for (const name of names) {
       const definition = Object.hasOwn(current.registry.packages, name) ? current.registry.packages[name] : undefined
-      if (!definition) throw new Error("UNKNOWN_ID")
+      if (!definition && !Object.hasOwn(enabled, name)) throw new Error("UNKNOWN_ID")
       rows.push(`# ${packageLabel(name)}`)
-      for (const id of [...definition.core, ...(command.action === "list" ? definition.optional : session!.packages[name])]) rows.push(`${id}\t${(await runtime.getSkillStatus(sessionID, id)).state}`)
+      for (const id of new Set([...(definition?.optional ?? []), ...(enabled[name] ?? [])])) {
+        const status = await runtime.getSkillStatus(sessionID, id)
+        rows.push(`${id}\t${status.state}${status.reason ? ` (${status.reason})` : ''}`)
+      }
     }
     const library = `Library: ${current.root}`
-    return rows.length ? [...rows, "", library].join("\n") : `${library}\nNo skills selected`
+    rows.push(...current.errors.map(error => `${error.package}\tERROR (${error.code})`))
+    return rows.length ? [...rows, "", library].join("\n") : `${library}\nNo skills available (all OFF by default)`
   }
   if (command.action === "packages") return orderedPackageNames(current.registry).map(name => `• ${packageLabel(name)}`).join("\n") || "No packages in this library"
   if (!["use", "add", "remove", "disable", "clear"].includes(command.action)) throw new Error("Unsupported skills command")
   await runtime.mutateSelection(sessionID, command.action as "use" | "add" | "remove" | "disable" | "clear", "packageName" in command ? command.packageName : "", "skills" in command ? command.skills : [], current.revision)
-  return "Selection updated"
+  return "Project skill toggles updated. Applies next turn; prior conversation content remains."
 }
 
 export function parseRawSkillsPrompt(input: string): string | undefined {

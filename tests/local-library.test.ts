@@ -1,292 +1,167 @@
-import test from "node:test"
-import assert from "node:assert/strict"
-import { mkdtemp, mkdir, writeFile, rm, symlink, rename } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import path from "node:path"
-import { createHash } from "node:crypto"
-import { createLocalRuntime } from "../src/local-library.ts"
-import { executeLocalSkillsCommand } from "../src/skills-service.ts"
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtemp, mkdir, writeFile, rm, symlink, rename } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { createLocalRuntime } from '../src/local-library.ts'
+import { executeLocalSkillsCommand } from '../src/skills-service.ts'
 
-test("Home previews latest selection before prompt without drafting or copying authority", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-preview-"))
-  const home = "__skill_router_home__"
-  try {
-    await mkdir(path.join(dir, "skills"))
-    await writeFile(path.join(dir, "registry.json"), JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: ["extra"], detect: {} } }, skills: { example: "skills/example.md", extra: "skills/extra.md" } }))
-    const a = await createLocalRuntime({ directory: dir, stateFile: path.join(dir, "state.json") })
-    const config = await a.configureLibrary(dir, "unset", true)
-    await a.selectPackage("old", "demo", ["extra"], config.revision)
-    for (let i = 0; i < 2; i++) {
-      await a.initializeLocalSession(home, config.revision, false, undefined, true)
-      assert.match(await executeLocalSkillsCommand(a, home, "status"), /example\tSelected/)
-      assert.doesNotMatch(await executeLocalSkillsCommand(a, home, "status"), /Loaded/)
-      const preview = await a.store.getSession(dir, home)
-      for (const field of ["pendingHomeSelection", "loadHistory", "verified", "taskPackage", "taskLoadedSkills", "taskSession"]) assert.equal(preview?.[field], undefined)
-      assert.deepEqual(await a.store.getLastSelection(dir), { demo: ["extra"] })
-    }
-    await a.mutateSelection(home, "remove", "demo", ["extra"], config.revision)
-    await a.initializeLocalSession(home, config.revision) // ordinary ensure cannot reset an explicit choice
-    assert.equal((await a.store.getSession(dir, home))?.pendingHomeSelection, true)
-    await a.initializeLocalSession("root", config.revision)
-    assert.deepEqual((await a.store.getSession(dir, "root"))?.packages, { demo: [] })
-    assert.equal((await a.store.getSession(dir, home))?.pendingHomeSelection, undefined)
-    await a.mutateSelection(home, "clear", "", [], config.revision)
-    await a.initializeLocalSession("empty", config.revision)
-    await a.initializeLocalSession(home, config.revision, false, undefined, true)
-    assert.deepEqual((await a.store.getSession(dir, home))?.packages, {})
-    await a.initializeLocalSession("old", config.revision)
-    assert.deepEqual((await a.store.getSession(dir, "old"))?.packages, { demo: ["extra"] })
-    await a.initializeLocalSession("child", config.revision, false, "old")
-    assert.deepEqual((await a.store.getSession(dir, "child"))?.packages, {})
-    const other = path.join(dir, "other")
-    await mkdir(other)
-    const b = await createLocalRuntime({ directory: other, stateFile: path.join(dir, "state.json") })
-    const separate = await b.configureLibrary(dir, "unset", true)
-    await b.initializeLocalSession(home, separate.revision, false, undefined, true)
-    assert.deepEqual((await b.store.getSession(other, home))?.packages, {})
-    const next = await a.configureLibrary(dir, config.revision, true)
-    await assert.rejects(a.initializeLocalSession(home, config.revision, false, undefined, true), /LIBRARY_CHANGED/)
-    await a.initializeLocalSession(home, next.revision, false, undefined, true)
-    assert.deepEqual((await a.store.getSession(dir, home))?.packages, {})
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+async function fixture(run: (root: string) => Promise<void>) {
+  const root = await mkdtemp(path.join(tmpdir(), 'arms-local-'))
+  try { await run(root) } finally { await rm(root, { recursive: true, force: true }) }
+}
+async function library(root: string, text = 'Synthetic instructions') {
+  await mkdir(path.join(root, 'demo'), { recursive: true })
+  await writeFile(path.join(root, 'demo/package.json'), JSON.stringify({ skills: { example: 'example.md', extra: 'extra.md' } }))
+  await writeFile(path.join(root, 'demo/example.md'), text)
+  await writeFile(path.join(root, 'demo/extra.md'), 'Synthetic extra')
+}
+const options = (root: string) => ({ directory: root, stateFile: path.join(root, 'state.json') })
+const enabled = { demo: ['demo/example'] }
+const authority = ['loadHistory', 'verified', 'taskPackage', 'taskLoadedSkills', 'taskSession']
 
-test("canonical initial symlink configuration preserves unchanged source selections", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-root-"))
-  try {
-    const root = path.join(dir, "a"), alias = path.join(dir, "alias")
-    await mkdir(path.join(root, "skills"), { recursive: true })
-    await writeFile(path.join(root, "skills/example.md"), "synthetic a")
-    await writeFile(path.join(root, "registry.json"), JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: [], detect: {} } }, skills: { example: "skills/example.md" } }))
-    await symlink(root, alias)
-    const runtime = await createLocalRuntime({ directory: dir, stateFile: path.join(dir, "state.json") })
-    const config = await runtime.configureLibrary(alias, "unset", true)
-    assert.equal(config.root, root)
-    await runtime.selectPackage("s", "demo", [], config.revision)
-    assert.equal((await runtime.refreshLibrary()).revision, config.revision)
-    assert.equal((await runtime.loadSkill("s", "example")).content, "synthetic a")
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+test('default root is project-local, OFF, and independent of legacy registry/environment', async () => fixture(async root => {
+  await library(path.join(root, '.openarms/packages'))
+  await writeFile(path.join(root, 'registry.json'), '{invalid legacy registry')
+  const runtime = await createLocalRuntime(options(root))
+  const current = await runtime.refreshLibrary()
+  assert.equal(current.root, path.join(root, '.openarms/packages'))
+  assert.deepEqual(await runtime.store.getLastSelection(root), {})
+  assert.equal((await runtime.getSkillStatus('s', 'demo/example')).state, 'OFF')
+  assert.doesNotMatch(await runtime.buildInstruction('s'), /Synthetic instructions/)
+  await runtime.mutateSelection('s', 'use', 'demo', [], current.revision)
+  assert.match(await runtime.buildInstruction('s'), /Synthetic instructions/)
+  assert.match(await runtime.buildInstruction('s'), /Synthetic extra/)
+  await runtime.mutateSelection('s', 'disable', 'demo', [], current.revision)
+  assert.doesNotMatch(await runtime.buildInstruction('s'), /Synthetic instructions/)
+}))
 
-test("equal-hash canonical root retarget retires state and rejects a captured load across runtimes", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-root-"))
-  try {
-    const root = path.join(dir, "a"), other = path.join(dir, "b")
-    const metadata = JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: [], detect: {} } }, skills: { example: "skills/example.md" } })
-    for (const [library, content] of [[root, "synthetic a"], [other, "synthetic b"]]) {
-      await mkdir(path.join(library, "skills"), { recursive: true })
-      await writeFile(path.join(library, "skills/example.md"), content)
-      await writeFile(path.join(library, "registry.json"), metadata)
-    }
-    const options = { directory: dir, stateFile: path.join(dir, "state.json") }
-    const a = await createLocalRuntime(options), b = await createLocalRuntime(options)
-    const config = await a.configureLibrary(root, "unset", true)
-    await a.selectPackage("s", "demo", [], config.revision)
-    await a.selectPackage("__skill_router_home__", "demo", [], config.revision)
-    assert.equal((await a.loadSkill("s", "example")).content, "synthetic a")
-    const transaction = a.store.localTransaction.bind(a.store)
-    let captured!: () => void, release!: () => void
-    const entered = new Promise<void>(resolve => { captured = resolve })
-    const gate = new Promise<void>(resolve => { release = resolve })
-    a.store.localTransaction = async (...args) => { captured(); await gate; return transaction(...args) }
-    const loading = a.loadSkill("s", "example")
-    await entered
-    await rename(root, path.join(dir, "original-a"))
-    await symlink(other, root)
-    // Revalidation must reject even before another runtime advances the revision.
-    release()
-    assert.equal((await loading).error?.code, "LIBRARY_CHANGED")
-    const next = await b.refreshLibrary()
-    assert.equal(next.root, other)
-    assert.equal(next.registryHash, config.registryHash)
-    assert.notEqual(next.revision, config.revision)
-    assert.deepEqual(await b.store.getLastSelection(dir), {})
-    for (const id of ["s", "__skill_router_home__"]) {
-      const session = await b.store.getSession(dir, id)
-      assert.deepEqual(session?.packages, {})
-      assert.equal(session?.loadHistory, undefined)
-      assert.equal(session?.taskLoadedSkills, undefined)
-      assert.equal(session?.pendingHomeSelection, undefined)
-    }
-    assert.equal((await a.loadSkill("s", "example")).error?.code, "NOT_SELECTED")
-    await assert.rejects(a.selectPackage("s", "demo", [], config.revision), /LIBRARY_CHANGED/)
-    await b.selectPackage("s", "demo", [], next.revision)
-    assert.equal((await a.loadSkill("s", "example")).content, "synthetic b")
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+test('Home, reopened roots and children share live project toggles without grants or locks', async () => fixture(async root => {
+  await library(root)
+  const a = await createLocalRuntime(options(root)), b = await createLocalRuntime(options(root))
+  const config = await a.configureLibrary(root, 'unset', true)
+  await a.selectPackage('old', 'demo', enabled.demo, config.revision)
+  for (const id of ['__skill_router_home__', 'root', 'child', 'old']) {
+    await Promise.all([a.initializeLocalSession(id, config.revision, false, 'old'), b.initializeLocalSession(id, config.revision, false, 'old')])
+    assert.match(await executeLocalSkillsCommand(a, id, 'status'), /demo\/example\tON/)
+    const session = await a.store.getSession(root, id)
+    assert.deepEqual(session?.packages, enabled)
+    for (const field of authority) assert.equal(session?.[field], undefined)
+  }
+  await b.mutateSelection('child', 'remove', 'demo', enabled.demo, config.revision)
+  for (const id of ['old', 'root', 'child']) {
+    assert.deepEqual((await a.store.getSession(root, id))?.packages, {})
+    assert.doesNotMatch(await a.buildInstruction(id), /Synthetic instructions/)
+  }
+  await a.selectPackage('old', 'demo', enabled.demo, config.revision)
+  const other = path.join(root, 'other'); await mkdir(other)
+  const isolated = await createLocalRuntime({ directory: other, stateFile: options(root).stateFile })
+  await isolated.configureLibrary(root, 'unset', true)
+  assert.deepEqual(await isolated.store.getLastSelection(other), {})
+  assert.doesNotMatch(await isolated.buildInstruction('old'), /Synthetic instructions/)
+}))
 
-test("local load validates context and cannot publish across an in-flight source switch", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-race-"))
-  try {
-    for (const name of ["a", "b"]) {
-      await mkdir(path.join(dir, name, "skills"), { recursive: true })
-      await writeFile(path.join(dir, name, "skills/example.md"), `synthetic ${name}`)
-      await writeFile(path.join(dir, name, "registry.json"), JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: [], detect: {} } }, skills: { example: "skills/example.md" } }))
-    }
-    const options = { directory: dir, stateFile: path.join(dir, "state.json") }
-    const a = await createLocalRuntime(options), b = await createLocalRuntime(options)
-    const config = await a.configureLibrary(path.join(dir, "a"), "unset", true)
-    await a.selectPackage("s", "demo", [], config.revision)
-    assert.equal((await a.loadSkill("s", "example")).content, "synthetic a")
-    assert.equal((await a.loadSkill("", "example")).error?.code, "INVALID_CONTEXT")
-    // Synchronize after the loader captured A, before its real locked transaction.
-    const transaction = a.store.localTransaction.bind(a.store)
-    let captured!: () => void, release!: () => void
-    const entered = new Promise<void>(resolve => { captured = resolve })
-    const gate = new Promise<void>(resolve => { release = resolve })
-    a.store.localTransaction = async (...args) => { captured(); await gate; return transaction(...args) }
-    const loading = a.loadSkill("s", "example")
-    await entered
-    const next = await b.configureLibrary(path.join(dir, "b"), config.revision, true)
-    release()
-    assert.equal((await loading).error?.code, "LIBRARY_CHANGED")
-    assert.equal((await b.getSkillStatus("s", "example")).state, "Missing")
-    assert.doesNotMatch(await b.buildInstruction("s"), /Selected local skill IDs/)
-    assert.equal((await b.store.getSession(dir, "s"))?.loadHistory, undefined)
-    await b.selectPackage("s", "demo", [], next.revision)
-    assert.equal((await b.loadSkill("s", "example")).content, "synthetic b")
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+test('canonical initial symlink root preserves unchanged enabled IDs', async () => fixture(async root => {
+  const source = path.join(root, 'a'), alias = path.join(root, 'alias')
+  await library(source); await symlink(source, alias)
+  const runtime = await createLocalRuntime(options(root))
+  const config = await runtime.configureLibrary(alias, 'unset', true)
+  assert.equal(config.root, source)
+  await runtime.selectPackage('s', 'demo', enabled.demo, config.revision)
+  assert.equal((await runtime.refreshLibrary()).revision, config.revision)
+  assert.equal((await runtime.loadSkill('s', 'demo/example')).content, 'Synthetic instructions')
+}))
 
-test("local lifecycle: automatic selection and mutation reject a stale source revision", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-lifecycle-"))
-  try {
-    await mkdir(path.join(dir, "skills"))
-    await writeFile(path.join(dir, "skills", "example.md"), "synthetic")
-    await writeFile(path.join(dir, "registry.json"), JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: ["extra"], detect: {} } }, skills: { example: "skills/example.md", extra: "skills/example.md" } }))
-    const a = await createLocalRuntime({ directory: dir, stateFile: path.join(dir, "state.json") })
-    assert.match(await executeLocalSkillsCommand(a, "s", "status"), /Not configured/)
-    const config = await a.configureLibrary(dir, "unset", true)
-    await a.selectPackage("s", "demo", ["extra"], config.revision)
-    const status = await executeLocalSkillsCommand(a, "s", "status")
-    assert.match(status, /example\tSelected/)
-    assert.ok(status.indexOf("Library:") > status.indexOf("example"))
-    await a.initializeLocalSession("new", config.revision)
-    assert.deepEqual((await a.store.getSession(dir, "new"))?.packages, { demo: ["extra"] })
-    await a.initializeLocalSession("no", config.revision)
-    assert.deepEqual((await a.store.getSession(dir, "no"))?.packages, { demo: ["extra"] })
-    await a.mutateSelection("s", "remove", "demo", ["extra"], config.revision)
-    assert.deepEqual((await a.store.getSession(dir, "s"))?.packages, { demo: [] })
-    await executeLocalSkillsCommand(a, "s", "clear")
-    assert.deepEqual(await a.store.getLastSelection(dir), {})
-    await executeLocalSkillsCommand(a, "s", "use demo extra")
-    await a.configureLibrary(dir, config.revision, true)
-    await assert.rejects(executeLocalSkillsCommand(a, "s", "use demo extra", config.revision), /LIBRARY_CHANGED/)
-    await assert.rejects(a.initializeLocalSession("late", config.revision, true), /LIBRARY_CHANGED/)
-    await assert.rejects(a.mutateSelection("s", "add", "demo", ["extra"], config.revision), /LIBRARY_CHANGED/)
-    assert.deepEqual(await a.store.getLastSelection(dir), {})
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+test('canonical root retarget rejects captured reads and retires project/session metadata', async () => fixture(async root => {
+  const source = path.join(root, 'a'), other = path.join(root, 'b')
+  await library(source, 'Synthetic A'); await library(other, 'Synthetic B')
+  const a = await createLocalRuntime(options(root)), b = await createLocalRuntime(options(root))
+  const config = await a.configureLibrary(source, 'unset', true)
+  await a.selectPackage('s', 'demo', enabled.demo, config.revision)
+  const transaction = a.store.localTransaction.bind(a.store)
+  let entered!: () => void, release!: () => void
+  const captured = new Promise<void>(resolve => { entered = resolve })
+  const gate = new Promise<void>(resolve => { release = resolve })
+  a.store.localTransaction = async (...args) => { entered(); await gate; return transaction(...args) }
+  const reading = a.loadSkill('s', 'demo/example'); await captured
+  await rename(source, path.join(root, 'old-a')); await symlink(other, source)
+  release()
+  assert.equal((await reading).error?.code, 'LIBRARY_CHANGED')
+  const changed = await b.refreshLibrary()
+  assert.equal(changed.root, other); assert.notEqual(changed.revision, config.revision)
+  assert.deepEqual(await b.store.getLastSelection(root), {})
+  const session = await b.store.getSession(root, 's')
+  assert.deepEqual(session?.packages, {})
+  for (const field of authority) assert.equal(session?.[field], undefined)
+  await assert.rejects(b.selectPackage('s', 'demo', enabled.demo, config.revision), /LIBRARY_CHANGED/)
+  await b.selectPackage('s', 'demo', enabled.demo, changed.revision)
+  assert.equal((await a.loadSkill('s', 'demo/example')).content, 'Synthetic B')
+}))
 
-test("automatic roots atomically consume Home once, preserve reopened roots and isolate children", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-auto-"))
-  try {
-    await mkdir(path.join(dir, "skills"))
-    await writeFile(path.join(dir, "registry.json"), JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: ["extra"], detect: {} } }, skills: { example: "skills/example.md", extra: "skills/example.md" } }))
-    const options = { directory: dir, stateFile: path.join(dir, "state.json") }
-    const a = await createLocalRuntime(options), b = await createLocalRuntime(options)
-    const config = await a.configureLibrary(dir, "unset", true)
-    await a.selectPackage("old", "demo", ["extra"], config.revision)
-    await Promise.all([a.initializeLocalSession("root", config.revision), b.initializeLocalSession("root", config.revision)])
-    assert.deepEqual((await a.store.getSession(dir, "root"))?.packages, { demo: ["extra"] })
-    await a.mutateSelection("__skill_router_home__", "clear", "", [], config.revision)
-    await a.selectPackage("old", "demo", ["extra"], config.revision)
-    await a.initializeLocalSession("home-root", config.revision)
-    assert.deepEqual((await a.store.getSession(dir, "home-root"))?.packages, {})
-    await a.initializeLocalSession("next", config.revision)
-    assert.deepEqual((await a.store.getSession(dir, "next"))?.packages, { demo: ["extra"] })
-    await a.initializeLocalSession("child", config.revision, false, "old")
-    assert.deepEqual((await a.store.getSession(dir, "child"))?.packages, {})
-    await a.mutateSelection("root", "clear", "", [], config.revision)
-    await a.selectPackage("old", "demo", ["extra"], config.revision)
-    await b.initializeLocalSession("root", config.revision)
-    assert.deepEqual((await a.store.getSession(dir, "root"))?.packages, {})
-    const root = await a.store.getSession(dir, "next")
-    for (const field of ["loadHistory", "verified", "taskPackage", "taskLoadedSkills", "taskSession"]) assert.equal(root?.[field], undefined)
-    const changed = await a.configureLibrary(dir, config.revision, true)
-    await b.initializeLocalSession("new-source", changed.revision)
-    assert.deepEqual((await a.store.getSession(dir, "new-source"))?.packages, {})
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+test('invalid context and in-flight source switches cannot publish old content', async () => fixture(async root => {
+  const source = path.join(root, 'a'), other = path.join(root, 'b')
+  await library(source); await library(other, 'Synthetic B')
+  const a = await createLocalRuntime(options(root)), b = await createLocalRuntime(options(root))
+  const config = await a.configureLibrary(source, 'unset', true)
+  await a.selectPackage('s', 'demo', enabled.demo, config.revision)
+  assert.equal((await a.loadSkill('', 'demo/example')).error?.code, 'INVALID_CONTEXT')
+  const transaction = a.store.localTransaction.bind(a.store)
+  let entered!: () => void, release!: () => void
+  const captured = new Promise<void>(resolve => { entered = resolve })
+  const gate = new Promise<void>(resolve => { release = resolve })
+  a.store.localTransaction = async (...args) => { entered(); await gate; return transaction(...args) }
+  const reading = a.loadSkill('s', 'demo/example'); await captured
+  await b.configureLibrary(other, config.revision, true); release()
+  assert.equal((await reading).error?.code, 'LIBRARY_CHANGED')
+  assert.equal((await b.getSkillStatus('s', 'demo/example')).state, 'OFF')
+  assert.doesNotMatch(await b.buildInstruction('s'), /Synthetic instructions/)
+}))
 
-test("synthetic local library: explicit configuration, selected load and switch isolation", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-local-"))
-  try {
-    const library = path.join(dir, "library")
-    await mkdir(path.join(library, "skills"), { recursive: true })
-    await writeFile(path.join(library, "skills", "example.md"), "synthetic content")
-    await writeFile(path.join(library, "registry.json"), JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: [], detect: {} } }, skills: { example: "skills/example.md" } }))
-    const options = { directory: dir, stateFile: path.join(dir, "state.json") }
-    const a = await createLocalRuntime(options), b = await createLocalRuntime(options)
-    assert.equal((await a.loadSkill("s", "example")).error?.code, "NOT_CONFIGURED")
-    const initial = await a.getLibrary()
-    await a.configureLibrary(library, initial.revision, false)
-    assert.equal((await a.getLibrary()).root, undefined)
-    const config = await a.configureLibrary(library, initial.revision, true)
-    await a.selectPackage("s", "demo", [], config.revision)
-    assert.equal((await b.loadSkill("s", "example")).content, "synthetic content")
-    assert.equal((await b.getSkillStatus("s", "example")).state, "Loaded")
-    assert.match(await b.buildInstruction("s"), /example.*load_skill/)
-    await a.selectPackage("__skill_router_home__", "demo", [], config.revision)
-    const other = path.join(dir, "other")
-    await mkdir(other)
-    const c = await createLocalRuntime({ directory: other, stateFile: options.stateFile })
-    const otherConfig = await c.configureLibrary(library, "unset", true)
-    await c.selectPackage("s", "demo", [], otherConfig.revision)
-    const changed = await a.configureLibrary(library, config.revision, true)
-    assert.notEqual(changed.revision, config.revision)
-    await assert.rejects(a.store.setPackage(dir, "s", "demo", []), /LOCAL_LIBRARY_REQUIRES_REVISION/)
-    await assert.rejects(a.store.restoreSession(dir, "s"), /LOCAL_LIBRARY_REQUIRES_REVISION/)
-    await assert.rejects(a.store.verifiedTransaction(dir, "s", session => {
-      session.packages = { demo: [] }
-      return { ok: true }
-    }), /LOCAL_LIBRARY_REQUIRES_REVISION/)
-    assert.equal((await b.loadSkill("s", "example")).error?.code, "NOT_SELECTED")
-    assert.deepEqual(await a.store.getLastSelection(a.projectRoot), {})
-    assert.deepEqual((await a.store.getSession(a.projectRoot, "__skill_router_home__"))?.packages, {})
-    assert.equal((await c.loadSkill("s", "example")).ok, true)
-    await assert.rejects(a.selectPackage("s", "demo", [], config.revision), /LIBRARY_CHANGED/)
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+test('confirmed source changes reset OFF; stale mutations and obsolete state APIs reject', async () => fixture(async root => {
+  await library(root)
+  const runtime = await createLocalRuntime(options(root))
+  const config = await runtime.configureLibrary(root, 'unset', true)
+  await runtime.selectPackage('s', 'demo', enabled.demo, config.revision)
+  await runtime.configureLibrary(root, config.revision, false)
+  assert.deepEqual(await runtime.store.getLastSelection(root), enabled)
+  const changed = await runtime.configureLibrary(root, config.revision, true)
+  assert.notEqual(changed.revision, config.revision)
+  assert.deepEqual(await runtime.store.getLastSelection(root), {})
+  await assert.rejects(runtime.initializeLocalSession('s', config.revision), /LIBRARY_CHANGED/)
+  await assert.rejects(runtime.mutateSelection('s', 'add', 'demo', enabled.demo, config.revision), /LIBRARY_CHANGED/)
+  await assert.rejects(executeLocalSkillsCommand(runtime, 's', 'use demo demo/example', config.revision), /LIBRARY_CHANGED/)
+  await assert.rejects(runtime.store.setPackage(root, 's', 'demo', []), /LOCAL_LIBRARY_REQUIRES_REVISION/)
+  await assert.rejects(runtime.store.restoreSession(root, 's'), /LOCAL_LIBRARY_REQUIRES_REVISION/)
+  await assert.rejects(runtime.store.verifiedTransaction(root, 's', () => ({ ok: true })), /LOCAL_LIBRARY_REQUIRES_REVISION/)
+}))
 
-test("synthetic v2 metadata needs no grants and registry edits retire selections", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-local-"))
-  try {
-    await mkdir(path.join(dir, "skills"))
-    await writeFile(path.join(dir, "skills", "example.md"), "synthetic")
-    const metadata = { schemaVersion: 2, packages: { demo: { core: ["example"], optional: [], detect: { files: [], extensions: [], dependencies: [] } } }, skills: { example: { path: "skills/example.md", owner: "demo", kind: "core", contentHash: `sha256:${createHash("sha256").update("synthetic").digest("hex")}`, maxTokens: 100, defaultPermission: "deny", workflows: {}, references: {} } } }
-    await writeFile(path.join(dir, "registry.json"), JSON.stringify(metadata))
-    const options = { directory: dir, stateFile: path.join(dir, "state.json") }
-    const a = await createLocalRuntime(options), b = await createLocalRuntime(options)
-    const config = await a.configureLibrary(dir, "unset", true)
-    await a.selectPackage("s", "demo", [], config.revision)
-    assert.equal((await b.loadSkill("s", "example")).content, "synthetic")
-    await writeFile(path.join(dir, "registry.json"), JSON.stringify(metadata, null, 2))
-    assert.equal((await b.loadSkill("s", "example")).error?.code, "NOT_SELECTED")
-    assert.notEqual((await a.getLibrary()).revision, config.revision)
-    await assert.rejects(a.configureLibrary(dir, config.revision, true), /LIBRARY_CHANGED/)
-    assert.equal((await a.loadSkill("s", "unknown")).error?.code, "UNKNOWN_ID")
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+test('manifest edits are live; new IDs remain OFF and legacy metadata cannot enable them', async () => fixture(async root => {
+  await library(root)
+  const runtime = await createLocalRuntime(options(root))
+  const config = await runtime.configureLibrary(root, 'unset', true)
+  await runtime.selectPackage('s', 'demo', enabled.demo, config.revision)
+  await writeFile(path.join(root, 'registry.json'), '{old metadata is ignored')
+  assert.match(await runtime.buildInstruction('s'), /Synthetic instructions/)
+  await writeFile(path.join(root, 'demo/package.json'), JSON.stringify({ skills: { added: 'extra.md' } }))
+  assert.equal((await runtime.getSkillStatus('s', 'demo/example')).state, 'ERROR')
+  assert.equal((await runtime.getSkillStatus('s', 'demo/added')).state, 'OFF')
+  assert.doesNotMatch(await runtime.buildInstruction('s'), /Synthetic instructions/)
+  assert.equal((await runtime.loadSkill('s', 'unknown')).error?.code, 'UNKNOWN_ID')
+}))
 
-test("synthetic local library rejects escaping symlinks and oversized output", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "openarms-local-"))
-  try {
-    const library = path.join(dir, "library")
-    await mkdir(path.join(library, "skills"), { recursive: true })
-    await writeFile(path.join(dir, "outside.md"), "outside")
-    await symlink(path.join(dir, "outside.md"), path.join(library, "skills", "example.md"))
-    await writeFile(path.join(library, "registry.json"), JSON.stringify({ version: 1, packages: { demo: { core: ["example"], optional: [], detect: {} } }, skills: { example: "skills/example.md" } }))
-    const runtime = await createLocalRuntime({ directory: dir, stateFile: path.join(dir, "state.json"), maxBytes: 4 })
-    const config = await runtime.configureLibrary(library, (await runtime.getLibrary()).revision, true)
-    await runtime.selectPackage("s", "demo", [], config.revision)
-    assert.equal((await runtime.loadSkill("s", "example")).error?.code, "UNSAFE_PATH")
-    await rm(path.join(library, "skills", "example.md"))
-    await writeFile(path.join(library, "skills", "example.md"), "oversized")
-    assert.equal((await runtime.loadSkill("s", "example")).error?.code, "OUTPUT_TOO_LARGE")
-    await writeFile(path.join(library, "skills", "example.md"), Buffer.from([0xc3, 0x28]))
-    assert.equal((await runtime.loadSkill("s", "example")).error?.code, "INVALID_ENCODING")
-    await assert.rejects(runtime.configureLibrary(path.join(dir, "missing"), config.revision, true), /INVALID_LIBRARY/)
-    assert.equal((await runtime.getLibrary()).revision, config.revision)
-  } finally { await rm(dir, { recursive: true, force: true }) }
-})
+test('safe reads reject escaping symlinks, oversized bytes, invalid UTF8 and missing roots', async () => fixture(async root => {
+  const source = path.join(root, 'library'); await library(source)
+  const file = path.join(source, 'demo/example.md')
+  await writeFile(path.join(root, 'outside.md'), 'outside')
+  await rm(file); await symlink(path.join(root, 'outside.md'), file)
+  const runtime = await createLocalRuntime({ ...options(root), maxBytes: 4 })
+  const config = await runtime.configureLibrary(source, 'unset', true)
+  await runtime.selectPackage('s', 'demo', enabled.demo, config.revision)
+  assert.equal((await runtime.loadSkill('s', 'demo/example')).error?.code, 'UNSAFE_PATH')
+  await rm(file); await writeFile(file, 'oversized')
+  assert.equal((await runtime.loadSkill('s', 'demo/example')).error?.code, 'OUTPUT_TOO_LARGE')
+  await writeFile(file, Buffer.from([0xc3, 0x28]))
+  assert.equal((await runtime.loadSkill('s', 'demo/example')).error?.code, 'INVALID_ENCODING')
+  await assert.rejects(runtime.configureLibrary(path.join(root, 'missing'), config.revision, true))
+  assert.equal((await runtime.getLibrary()).revision, config.revision)
+}))

@@ -43,10 +43,10 @@ export function validateStatic(directory = root, environment = process.env) {
   for (const file of ["src/runtime.ts", "plugins/skill-router-server.ts", "plugins/skill-router-tui.tsx", "registry.json", "sandbox/entrypoint.mjs", "sandbox/smoke-runtime.mjs"]) assert.equal(allow(file), true, `Required runtime file excluded from build: ${file}`)
   for (const file of ["sandbox/.env", "sandbox/local/auth.json", "src/node_modules/cache", "src/.git/config", "sandbox/auth.json"]) assert.equal(allow(file), false, `Unexpected build context inclusion: ${file}`)
   const source = readFileSync(path.join(directory, "plugins/skill-router-server.ts"), "utf8")
-    assert.match(source, /load_skill\s*:\s*tool\(/, "Missing source tool declaration")
-    assert.doesNotMatch(source, /load_verified_skill\s*:/, "Legacy verified tool retained")
-   assert.match(source, /skill\s*:\s*tool\.schema\.string\(/, "Missing skill argument declaration")
-   assert.doesNotMatch(source, /load_skill_package\s*:/, "Legacy tool retained")
+   assert.doesNotMatch(source, /(?:load_skill|load_verified_skill|load_skill_package)\s*:/, "Model-facing skill loader retained")
+   assert.match(source, /"experimental\.chat\.system\.transform"/, "Missing automatic instruction hook")
+   assert.match(source, /runtime\.buildInjection\(sessionID\)/, "Missing safe automatic assembly")
+   assert.match(source, /openarms_usage\s*:\s*tool\(/, "Missing independent usage tool")
   return { checks: 8, configuration }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

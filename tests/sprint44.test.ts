@@ -10,7 +10,7 @@ import { resolveSkillScope } from '../src/skill-scope-resolver.ts'
 import { decompileSkillPackage } from '../src/skill-decompiler-service.ts'
 
 const digest = (text: string) => `sha256:${createHash('sha256').update(text).digest('hex')}`
-test('v2 core/topic integrity, selection, invalid IDs and symlink boundaries', async () => {
+test('manifest skills and references toggle independently; invalid topics and symlinks fail closed', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'sprint44-'))
   try {
     await mkdir(path.join(root, 'skills/demo/references'), { recursive: true })
@@ -19,22 +19,23 @@ test('v2 core/topic integrity, selection, invalid IDs and symlink boundaries', a
     const registry = { schemaVersion: 2, packages: { demo: { core: ['demo'], optional: [], detect: { files: [], extensions: [], dependencies: [] } } }, skills: { demo: { owner: 'demo', kind: 'core', path: 'skills/demo/SKILL.md', contentHash: digest('Core'), maxTokens: 100, defaultPermission: 'deny', workflows: {}, references: { detail: { path: 'skills/demo/references/detail.md', contentHash: digest('Detail'), maxTokens: 100 } } } } }
     await writeFile(path.join(root, 'registry.json'), JSON.stringify(registry))
     const runtime = await createLocalRuntime({ directory: root, stateFile: path.join(root, 'state.json') })
-    const config = await runtime.configureLibrary(root, 'unset', true)
-    assert.equal((await runtime.loadSkill('s', 'demo', 'detail')).error?.code, 'NOT_SELECTED')
-    await runtime.selectPackage('s', 'demo', [], config.revision)
-    assert.equal((await runtime.loadSkill('s', 'demo')).content, 'Core')
-    assert.equal((await runtime.loadSkill('s', 'demo', 'detail')).content, 'Detail')
-    for (const topic of ['', '../detail', 'other', '/detail', 'demo']) assert.equal((await runtime.loadSkill('s', 'demo', topic)).error?.code, 'UNKNOWN_TOPIC')
-    await runtime.selectPackage('fresh', 'demo', [], config.revision)
+    await writeFile(path.join(root, 'skills/demo/package.json'), JSON.stringify({ skills: { main: 'SKILL.md', detail: 'references/detail.md' } }))
+    const config = await runtime.configureLibrary(path.join(root, 'skills'), 'unset', true)
+    assert.equal((await runtime.loadSkill('s', 'demo/detail')).error?.code, 'NOT_SELECTED')
+    await runtime.selectPackage('s', 'demo', ['demo/main'], config.revision)
+    assert.equal((await runtime.loadSkill('s', 'demo/main')).content, 'Core')
+    assert.equal((await runtime.loadSkill('s', 'demo/detail')).error?.code, 'NOT_SELECTED')
+    for (const topic of ['', '../detail', 'other', '/detail', 'demo']) assert.equal((await runtime.loadSkill('s', 'demo/main', topic)).error?.code, 'UNKNOWN_TOPIC')
+    await runtime.selectPackage('fresh', 'demo', ['demo/main', 'demo/detail'], config.revision)
     await writeFile(path.join(root, 'skills/demo/references/detail.md'), 'DetaiL')
-    assert.equal((await runtime.loadSkill('fresh', 'demo', 'detail')).error?.code, 'HASH_MISMATCH')
-    assert.equal((await runtime.getSkillStatus('fresh', 'demo')).state, 'Selected')
+    assert.equal((await runtime.loadSkill('fresh', 'demo/detail')).content, 'DetaiL')
+    assert.equal((await runtime.getSkillStatus('fresh', 'demo/main')).state, 'ON')
     assert.equal((await runtime.store.getSession(root, 'fresh'))?.loadHistory, undefined)
     await writeFile(path.join(root, 'skills/demo/SKILL.md'), 'CorE')
-    assert.equal((await runtime.loadSkill('fresh', 'demo')).error?.code, 'HASH_MISMATCH')
+    assert.equal((await runtime.loadSkill('fresh', 'demo/main')).content, 'CorE')
     await rm(path.join(root, 'skills/demo/references/detail.md'))
     await symlink('../SKILL.md', path.join(root, 'skills/demo/references/detail.md'))
-    assert.equal((await runtime.loadSkill('fresh', 'demo', 'detail')).error?.code, 'UNSAFE_PATH')
+    assert.equal((await runtime.loadSkill('fresh', 'demo/detail')).error?.code, 'UNSAFE_PATH')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
@@ -57,9 +58,9 @@ test('audited registration serializes different installs, both scopes, rollback 
       assert.deepEqual(Object.keys(registry.skills).sort(), ['alpha', 'beta'])
       assert.equal(registry.skills.alpha.contentHash, digest(a.draft.skill.coreInterface))
       const runtime = await createLocalRuntime({ directory: root, stateFile: path.join(root, `${scope}-state.json`) })
-      const config = await runtime.configureLibrary(path.dirname(a.options.scopePlan.registry), 'unset', true)
-      await runtime.selectPackage('s', 'alpha', [], config.revision)
-      assert.equal((await runtime.loadSkill('s', 'alpha', 'alpha-detail')).content, 'Detail\nAuthored detail.')
+      const config = await runtime.configureLibrary(a.options.scopePlan.base, 'unset', true)
+      await runtime.selectPackage('s', 'alpha', ['alpha/reference-alpha-detail'], config.revision)
+      assert.equal((await runtime.loadSkill('s', 'alpha/reference-alpha-detail')).content, 'Detail\nAuthored detail.')
       const overwrite = await make('alpha', true)
       for (const point of ['staged', 'backed-up', 'committed', 'registry-staged']) {
         await assert.rejects(registerDecompiledSkill(overwrite.raw, overwrite.draft, { ...overwrite.options, fault: async at => { if (at === point) throw Error('injected') } }), /injected/)

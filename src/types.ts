@@ -28,6 +28,7 @@ export type SkillLoadRecord = {
 }
 
 export type SessionState = {
+  autoSelection?: string
   pendingHomeSelection?: boolean
   selectionReady?: boolean
   childFallback?: boolean

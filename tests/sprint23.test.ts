@@ -218,7 +218,7 @@ test("legacy migrated synthetic registry retains verified security; active SDK i
     const runtime = await createRuntime({ directory: root })
     await runtime.store.setPackage(root, "s", "demo", [])
     const adapter: any = await SkillRouterServer({ directory: root, worktree: root } as any)
-    assert.deepEqual(Object.keys(adapter.tool), ["openarms_usage", "load_skill"])
+    assert.deepEqual(Object.keys(adapter.tool), ["openarms_usage"])
     const beforeUsage = await readFile(runtime.stateFile, "utf8")
     const budget = await adapter.tool.openarms_usage.execute({ command: "budget" }, { sessionID: "s" })
     assert.match(budget, /^Budget · report-only \/ does not block requests\n/)
@@ -505,9 +505,8 @@ test("legacy v1/unapproved v2 deny; active local SDK strict request and host con
   try {
     process.env.OPENARMS_LIBRARY_ROOT = root; process.env.XDG_STATE_HOME = root
     const adapter: any = await SkillRouterServer({ directory: root, worktree: root } as any)
-    assert.deepEqual(Object.keys(adapter.tool), ["openarms_usage", "load_skill"])
-    const response = JSON.parse(await adapter.tool.load_skill.execute({ skill: "example", extra: "denied" }, { sessionID: "s" }))
-    assert.equal(response.error.code, "INVALID_REQUEST")
+    assert.deepEqual(Object.keys(adapter.tool), ["openarms_usage"])
+    assert.equal(adapter.tool.load_skill, undefined)
     const config = JSON.parse(await readFile(new URL("../sandbox/config/opencode.json", import.meta.url), "utf8"))
     // Fixture models only ordered host glob decisions, not a live OpenCode engine.
     const decide = (rules: any, value: string) => Object.entries(rules).reduce((decision, [pattern, action]) => picomatch.isMatch(value, pattern, { dot: true, matchBase: !pattern.includes("/") }) ? action : decision, "ask")

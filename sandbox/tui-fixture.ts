@@ -45,7 +45,7 @@ export default {
       })), { name: 'openarms.test.installed-load', title: 'Load authored installed core/topic', namespace: 'palette', slashName: 'arms-test-installed-load',
         async run() {
           const runtime = await createLocalRuntime({ directory: api.state.path.directory, worktree: api.state.path.worktree })
-          const core = await runtime.loadSkill(HOME_SESSION, 'pty-workflow'), topic = await runtime.loadSkill(HOME_SESSION, 'pty-workflow', 'details')
+          const core = await runtime.loadSkill(HOME_SESSION, 'pty-workflow/main'), topic = await runtime.loadSkill(HOME_SESSION, 'pty-workflow/reference-details')
           if (!core.ok || !topic.ok || !core.content?.includes('Must preserve rollback.') || !topic.content?.includes('Review steps.')) throw Error('INSTALLED_LOAD_FAILED')
           api.ui.toast({ title: 'Installed core/topic loaded', message: 'Synthetic data; real hash-checked runtime; no autonomous model routing claim', variant: 'success', duration: 5000 })
         },
@@ -69,7 +69,7 @@ export default {
         async run() {
           const runtime = await createLocalRuntime({ directory: api.state.path.directory, worktree: api.state.path.worktree })
           if ((await runtime.getLibrary()).root !== "/tmp/openarms-pty-library") throw Error("SYNTHETIC_ROOT_REQUIRED")
-          const result = await runtime.loadSkill(HOME_SESSION, "docs-editor")
+          const result = await runtime.loadSkill(HOME_SESSION, "docs/docs-editor")
           if (!result.ok || result.content !== "Synthetic PTY editor, not an enabled skill.") throw Error("SYNTHETIC_LOAD_FAILED")
           api.ui.toast({ title: "Synthetic loaded", message: "Generated fixture only; no provider request", variant: "success", duration: 5000 })
         },

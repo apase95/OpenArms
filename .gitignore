@@ -11,5 +11,10 @@ state.json
 *.db-shm
 *.db-wal
 sandbox/local/
+.dev-env/
 graphify-out/
 .opencode/
+
+# OpenArms runtime logs
+.openarms/logs/
+.openarms/.handoff-lock

@@ -1,9 +1,28 @@
+import { existsSync } from "node:fs"
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import type { Registry } from "./types.ts"
 
 export function resolveProjectRoot(worktree: string | undefined, directory: string): string {
-  return worktree && worktree !== "/" ? worktree : directory
+  if (worktree && worktree !== "/") return worktree
+  let current = path.resolve(directory)
+  const root = path.parse(current).root
+  while (current && current !== root) {
+    if (
+      existsSync(path.join(current, ".git")) ||
+      existsSync(path.join(current, "pom.xml")) ||
+      existsSync(path.join(current, "package.json")) ||
+      existsSync(path.join(current, "build.gradle")) ||
+      existsSync(path.join(current, "Cargo.toml")) ||
+      existsSync(path.join(current, "go.mod"))
+    ) {
+      return current
+    }
+    const parent = path.dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+  return directory
 }
 
 const SKIP = new Set(["node_modules", "dist", "build", "coverage", ".git", ".cache", ".next"])

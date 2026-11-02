@@ -30,6 +30,15 @@
     "dependencies": { "tests": ["tests/core.test.ts", "tests/server.test.ts", "tests/test-runner.test.mjs", "tests/smoke-runner.test.mjs"], "full": true, "smoke": ["smoke-runtime", "tui-smoke"], "reason": "DEPENDENCY_CONTRACT" }
   },
   "files": {
+    ".opencode/handoff-local-opencode.md": "docs",
+    "prompts/openarms-controller-prompt.md": "docs",
+    "prompts/openarms-implementer-prompt.md": "docs",
+    "examples/local-opencode/opencode.json": "server",
+    "examples/local-opencode/tui.json": "server",
+    "src/package-catalog.ts": "core",
+    "sandbox/host.sh": "test-infra",
+    "src/auto-session-rotator.ts": "core",
+    "src/progressive-rotation.ts": "core",
     "src/skill-install-pipeline.ts": "tui-service",
     "src/sprint45.ts": "core",
     ".opencode/handoff-sprint43-service.md": "docs",

@@ -5,10 +5,11 @@ import path from 'node:path'
 
 // Controller-reviewed exact inventory. Never enumerate the repository or copy its registry/skills.
 export const contextInputs = [
+  'src/package-catalog.ts',
   ...'skill-install-pipeline.ts skill-scope-resolver.ts skill-decompiler.ts skill-decompiler-service.ts skill-decompiler-writer.ts skill-model-adapter.ts'.split(' ').map(f => `src/${f}`),
   ...'skill-security-audit.ts skill-audit-review.ts skill-remote-fetcher.ts skill-archive-extractor.ts'.split(' ').map(f => `src/${f}`),
   ...'test-output-compactor.ts linter-output-compactor.ts git-diff-output-compactor.ts file-inspection-compactor.ts build-output-compactor.ts'.split(' ').map(f => `src/${f}`),
-  ...'budget-executor.ts budget-policy.ts commands.ts governance-hooks.ts governance-telemetry.ts local-library.ts noise-preset.mjs output-governor.ts package-loader.ts project.ts registry-v2-types.ts registry.ts runtime.ts session-handoff.ts session-rotation.ts skills-service.ts state-schema.ts state-store.ts tool-policy.ts types.ts usage-query.ts usage-runtime.ts usage-store.ts verified-loader.mjs'.split(' ').map(f => `src/${f}`),
+  ...'auto-session-rotator.ts budget-executor.ts budget-policy.ts commands.ts governance-hooks.ts governance-telemetry.ts local-library.ts noise-preset.mjs output-governor.ts package-loader.ts progressive-rotation.ts project.ts registry-v2-types.ts registry.ts runtime.ts session-handoff.ts session-rotation.ts skills-service.ts sprint45.ts state-schema.ts state-store.ts tool-policy.ts types.ts usage-query.ts usage-runtime.ts usage-store.ts verified-loader.mjs'.split(' ').map(f => `src/${f}`),
   ...'server-core.ts shared.ts skill-router-server.ts skill-router-tui.tsx tui-core.ts'.split(' ').map(f => `plugins/${f}`),
   ...'entrypoint.mjs manage.mjs process-output.mjs smoke.mjs smoke-runtime.mjs smoke-static.mjs tui-fixture-launch.mjs tui-fixture.ts tui-smoke.py config/opencode.json config/tui.json fixtures/empty-project/.gitkeep fixtures/docs-project/README.md Dockerfile compose.yaml compose.installed.yaml'.split(' ').map(f => `sandbox/${f}`),
   'scripts/registry-v2.mjs', 'package.json', 'package-lock.json', 'LICENSE', '.dockerignore',

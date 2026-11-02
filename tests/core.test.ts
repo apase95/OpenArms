@@ -13,6 +13,29 @@ import { StateStore } from "../src/state-store.ts"
 import type { Registry } from "../src/types.ts"
 
 const roots: string[] = []
+test("skills action menu offers direct status and enable flow without separate browse", async () => {
+  const source = await readFile(new URL("../plugins/skill-router-tui.tsx", import.meta.url), "utf8")
+  const menu = source.slice(source.indexOf("const actions: PickerOption[]"), source.indexOf('openSelect("Select Action"'))
+  assert.deepEqual([...menu.matchAll(/value: "([^"]+)"/g)].map(match => match[1]),
+    ["status", "use", "remove", "disable", "clear", "help", "install", "__done__"])
+  assert.doesNotMatch(menu, /title: "browse packages"/)
+  assert.doesNotMatch(menu, /bulk enable package/)
+})
+
+test("package picker shows clean ON or OFF without parentheses", async () => {
+  const source = await readFile(new URL("../plugins/skill-router-tui.tsx", import.meta.url), "utf8")
+  const picker = source.slice(source.indexOf("const openPackagePicker ="), source.indexOf("const openActionPicker ="))
+  assert.match(picker, /enabled.has\(name\) \? "ON" : "OFF"/)
+  assert.doesNotMatch(picker, /some or all skills/)
+})
+
+test("enable picker marks already enabled skills and retains bulk for empty packages", async () => {
+  const source = await readFile(new URL("../plugins/skill-router-tui.tsx", import.meta.url), "utf8")
+  const picker = source.slice(source.indexOf("const openSkillPicker ="), source.indexOf("const openPackagePicker ="))
+  assert.match(picker, /selected.has\(skill\) \? "ON — already enabled" : "OFF"/)
+  assert.match(picker, /if \(action === "use"\) options.unshift\(\{ title: 'Enable all skills in package', value: ''/)
+  assert.match(picker, /await run\(`\$\{action\} \$\{packageName\}\$\{skill \? ` \$\{skill\}` : ""\}`/)
+})
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
 
 async function fixture() {

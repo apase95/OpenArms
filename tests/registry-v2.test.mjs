@@ -129,8 +129,9 @@ test('registered children and budget threshold are audited independently', () =>
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 test('CI gate executes production CLI for valid, byte-drift, symlink and duplicate fixtures', () => {
-  const result = spawnSync(process.execPath, ['scripts/registry-v2-ci.mjs'], { encoding: 'utf8', timeout: 1500 })
-  assert.equal(result.status, 0, result.stderr)
+  // Four sequential children each allow 2000ms, plus parent startup and cleanup.
+  const result = spawnSync(process.execPath, ['scripts/registry-v2-ci.mjs'], { encoding: 'utf8', timeout: 12000 })
+  assert.equal(result.status, 0, `error=${result.error?.stack ?? 'none'}; signal=${result.signal ?? 'none'}; stderr=${result.stderr}`)
   assert.equal(result.stdout.trim().split('\n').length, 4)
 })
 test('CI wiring runs the production fixture gate before canonical runtime full', () => {
