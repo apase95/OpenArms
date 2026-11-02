@@ -1,4 +1,11 @@
-# Single local library: current user contract
+# Single local library: archived pre-toggle contract
+
+**Superseded:** use [project skill management](../../guides/skill-management.md).
+The current default is `.openarms/packages`; manifests live inside each package.
+Every skill is ON/OFF/ERROR and enabled instructions are injected on every system
+transform. No load tool, core/optional authorization or selection locks apply.
+Project toggles are shared across sessions; OFF does not erase conversation history
+or require `/new`. The dated procedures below remain historical reference only.
 
 Each canonical project has exactly **one** library root. It starts **Not
 configured**; bundled files, installed mounts and environment variables do not

@@ -1,5 +1,11 @@
 # Lộ trình Phát triển Hệ thống (OpenArms Roadmap)
 
+Skill architecture has migrated to [project ON/OFF toggles](../guides/skill-management.md):
+per-package manifests, `.openarms/packages`, automatic per-turn injection and an
+audited installer manifest bridge. Phase 2 verified-loader/core-optional entries
+below are historical milestones, not current runtime requirements. Host smoke
+and manual acceptance must be recorded separately from implementation status.
+
 Thư mục này chứa danh sách các task kỹ thuật chi tiết phân theo từng giai đoạn (Phase) từ lúc khởi tạo dự án cho đến định hướng phát triển trong tương lai.
 
 Phase 4 có [staged security audit Sprint 4.2](../testing/how_to_test/Sprint_42.md),

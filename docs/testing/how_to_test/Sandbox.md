@@ -1,5 +1,20 @@
 # Hướng dẫn kiểm thử sandbox đầy đủ
 
+> **Tài liệu tham khảo lịch sử, không phải luồng kiểm thử mặc định.** `verify`
+> và pre-push chỉ chạy trên host. Các yêu cầu Docker/PTY và ví dụ sandbox bên
+> dưới chỉ áp dụng khi chủ động chọn smoke; xem [hướng dẫn hiện hành](../testing.md).
+
+## Current skill migration acceptance
+
+Use [project toggles](../../guides/skill-management.md), not the archived
+single-library loader steps below. Create authored manifests under the sandbox
+project's `.openarms/packages`; host paths must be explicitly mounted. Existing
+registry/skills mounts are legacy export fixtures, not a runtime fallback.
+Static/runtime smoke now requires automatic system injection wiring and absence
+of all model-facing skill loaders. TUI acceptance must test ON/OFF/ERROR, same-
+session OFF and project isolation; historical Selected/Loaded/core/topic cases
+below are superseded. Docker/PTY failures remain blockers, not passes.
+
 [Tổng quan](../how_to_test_overview.md) · [Bảng lệnh](../testing.md) · [Hợp đồng smoke](../smoke-contract.md) · [Vận hành sandbox](../../../sandbox/README.md)
 
 Hướng dẫn này đối chiếu các kiểm tra đang có trong mã nguồn, không phải biên bản

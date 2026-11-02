@@ -1,5 +1,52 @@
 # Bảng lệnh và script
 
+## Current host-first policy
+
+`verify` and `--pre-push` run only host syntax/Node checks. Integration file
+classifications retain reference smoke metadata but report
+`LEGACY_SMOKE_EXPLICIT_ONLY`; they never schedule Docker/PTY/static smoke.
+Pre-push forces host full once. Sandbox remains reference-only; smoke is neither
+required nor claimed passed by host verification. Explicit `smoke-static`,
+`smoke-runtime` and `tui-smoke` modes retain their prerequisites/cache behavior.
+The dated sprint results below are historical, not evidence for a new revision.
+
+Current skill contract: [project toggles and migration](../guides/skill-management.md).
+Use `tests/skill-toggle.test.ts` for the isolated injection/symlink edge and
+`tests/skill-install-pipeline.test.ts` for audited manifest publication/cancellation.
+`tests/local-library.test.ts` retains source-race, UTF-8, bounds and state isolation
+coverage. Full covers these once when shared runtime changes require it. Runtime
+smoke asserts loader tools are absent; host first-turn behavior remains a separate
+acceptance check. Dated load/grant/core-optional results below are historical.
+
+Sprint 5.3 explicit user-confirmed handoff: [setup, tests and recovery](how_to_test/Sprint_53.md).
+The meter now reviews an operator-prepared draft and can create/navigate/send once
+after explicit confirmation. This is independent of the disabled 5.2 detector;
+the user must attest exclusive single-controller session ownership. Concurrent
+multi-client use is unsupported; fresh SDK checks do not provide host atomicity.
+real first-turn autonomous skill selection and host interaction acceptance remain open.
+
+Sprint 5.2 API-only fallback: isolated RED/GREEN diagnostic is
+`node --experimental-strip-types --test tests/progressive-rotation.test.ts`.
+This exact filename limits Node's test runner to the offline engine/presenter
+cases. No external service or host completion detector is mocked into production.
+For policy verification include `src/progressive-rotation.ts`, its test and both
+test mapping files along with the complete overlapping Sprint 5.1 scope.
+Tests cover sanitized silent drafts, explicit/stale/active/subagent boundaries,
+cross-turn deduplication, critical escalation, invalid IDs/revisions with matching
+proof, stale callbacks/queued expiry, synchronous presenter dismissal, oversized
+and malformed facts, retained provenance, timer cleanup and confirmation ownership.
+Fact text is limited to 4096 characters before sanitizer regexes; rejected facts
+are omitted whole rather than prefix-truncated. Draft construction has no disk port.
+Passing these does not establish host atomic completion or concrete TUI wiring;
+automatic alerts remain disabled. The independent explicit 5.3 operation is
+described above; automatic 5.2-to-5.3 triggering remains incomplete.
+Latest review-fix verification (`--task sprint-5.2`, complete overlapping scope,
+`--synthetic`): syntax 9/9, full 311/311, runtime smoke 5/5; static smoke reused
+its unchanged-input pass. TUI smoke failed at `tui-startup` (120-second timeout,
+125.3-second stage duration), so terminal acceptance is currently unverified.
+No unchanged retry was attempted. Controller-owned diagnosis evidence:
+`.openarms/logs/tui-smoke-63512111b2672f0378fc92ef-df49bd12-d0f3-4c51-9d66-76f0bbc6bce0.log`.
+
 Decompiler/service/writer API-only, unregistered: [Sprint 4.3](how_to_test/Sprint_43.md).
 
 Foundation nhập skill API-only: [Sprint 4.1](how_to_test/Sprint_41.md).
@@ -32,10 +79,10 @@ Các lệnh terminal chạy từ root repository; thay phần `<...>` bằng gi�
 | Khi nào | Lệnh từ root repository | Kết quả mong đợi |
 |---|---|---|
 | Sau sửa đáng kể | `npm run test:syntax -- --file <file>` | Phản hồi cú pháp nhanh |
-| Cuối task | `npm test -- --task <task-id> --file <file-a> --file <file-b>` | Tests/smoke theo policy, đủ phạm vi thật |
+| Cuối task | `npm test -- --task <task-id> --file <file-a> --file <file-b>` | Host tests theo policy, đủ phạm vi thật |
 | Chỉ tài liệu | `npm test -- --file docs/README.md` | Bỏ qua code tests |
-| Đổi server/TUI/sandbox | `npm test` | Chỉ ranh giới cần thiết, server-only không kéo TUI |
-| Trước push | `npm run test:pre-push -- --base <revision>` | Full một lần + smoke chọn lọc |
+| Đổi server/TUI/sandbox | `npm test` | Chỉ host checks; sandbox không tự chạy |
+| Trước push | `npm run test:pre-push -- --base <revision>` | Host full một lần |
 | CI chủ động chọn | `CI=true npm run test:pre-push -- --base <revision>` | Không tin stamp cục bộ |
 | Chạy lại smoke | `npm run test:smoke-runtime -- --force` | Bỏ stamp, dùng lại image hợp lệ |
 
@@ -46,7 +93,8 @@ plan tường minh; full bao phủ related, không chạy cả hai trên cùng r
 `<revision>` là commit gốc cần so sánh; CI phải fetch mốc đó và đủ history.
 Có thể chạy pre-push thủ công hoặc tự cấu hình hook/CI; không tự cài hook,
 không chạy full ở pre-commit. `--pre-push` chỉ dùng với verify; unknown vẫn blocked.
-Thiếu capability TUI thì bổ sung Linux/macOS, Python/PTY và Docker, không skip để pass.
+Chỉ explicit legacy smoke mới cần capability Linux/macOS, Python/PTY và Docker;
+thiếu capability chặn smoke, không chặn host verify.
 
 Cache chỉ cho smoke pass, SHA-256 theo dependency/phiên bản/mode/allowlist môi
 trường; docs không làm mất hiệu lực, dependency đổi thì chạy lại. Fail/timeout/
@@ -105,9 +153,10 @@ giữ nguyên hash library và invalidation; không được suy ra smoke đạt
 
 ### Synthetic-only integration
 
-`node scripts/arms-test.mjs verify --synthetic --task <task-id> --file <path>`
-chạy full/static/runtime/PTY theo classifier. `--synthetic` cũng hỗ trợ
-`smoke-runtime` và `tui-smoke`, không kết hợp `--installed` hoặc baseline.
+`verify --synthetic` vẫn chỉ chạy host checks; flag không tự opt in smoke.
+Để yêu cầu legacy integration riêng dùng
+`node scripts/arms-test.mjs smoke-runtime --synthetic --task <task-id>` hoặc
+`tui-smoke --synthetic`, không kết hợp `--installed` hoặc baseline.
 Runner build từ context tạm với exact allowlist ordinary source/config/package;
 registry và content đều tự sinh, không duyệt/read/hash/copy library thật.
 Fingerprint bao gồm generator, output fixture, code, build definitions và config;

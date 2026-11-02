@@ -33,7 +33,7 @@ graph TD
     TuiAdapt --> LocalLib
     ServerAdapt --> LocalLib
     ServerAdapt --> StateStore
-    Agent -->|"load_skill({skill})"| ServerAdapt
+    Agent -->|"system.transform each turn"| ServerAdapt
     LocalLib -->|"Nội dung skill đã kiểm tra"| Agent
     Agent --> HostTools
     HostPerm -.->|"Kiểm soát quyền thực thi OS"| HostTools
@@ -52,7 +52,7 @@ graph TD
 
 | Nhiệm vụ / Hành vi | Do OpenArms chịu trách nhiệm | Do OpenCode Host chịu trách nhiệm |
 |---|---|---|
-| **Cấu hình Library** | Cho phép chọn 1 thư mục gốc (`library root`), refresh registry | Không can thiệp thư viện skill |
+| **Cấu hình Library** | Default `.openarms/packages`, optional external root, per-package manifests | Không can thiệp thư viện skill |
 | **Đọc nội dung Skill** | Kiểm tra safe-path, ngăn ngừa Path Traversal | Không can thiệp nạp skill cục bộ |
 | **Quyền truy cập file/OS** | KHÔNG (OpenArms không cấp quyền OS) | **Có** (OpenCode hỏi người dùng Ask/Allow/Deny) |
 | **Thực thi lệnh Shell** | KHÔNG | **Có** (Chạy qua Docker sandbox hoặc OS host) |
@@ -63,17 +63,13 @@ graph TD
 ## 3. Vòng đời Nạp Skill Cục bộ (Skill Lifecycle)
 
 ```text
-[Dự án Mới] ──> Library: UNSET (Chưa cấu hình)
-       │
-       ▼ (Người dùng chọn thư mục qua TUI /skills)
-[Đã chọn Library Root] ──> Quét `registry.json` ──> Danh sách Skills hiển thị
-       │
-       ▼ (Người dùng bấm chọn Skill: State = SELECTED)
-[Selected Skill]
-       │
-       ▼ (Agent gọi công cụ: `load_skill({skill: "id"})`)
-[Kiểm tra Safe Path] ──> Hợp lệ? ──> Đọc nội dung ──> State = LOADED ──> Nạp vào Context
+[New project] → .openarms/packages → package.json manifests → all OFF
+[TUI ON/OFF] → project enabled IDs → system.transform → safe reads → instructions
+[Read failure] → ERROR; [OFF] → no injection on subsequent turns
 ```
+
+No core/optional distinction or selection grant/lock applies. OFF cannot erase
+old conversation context. [Canonical format and migration](../guides/skill-management.md).
 
 ---
 

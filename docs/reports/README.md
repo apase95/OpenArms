@@ -4,7 +4,7 @@ Thư mục này lưu trữ các báo cáo nghiên cứu, đánh giá cột mốc
 
 > [!NOTE]
 > **Phân biệt Hiện tại và Lịch sử:**
-> - **Kiến trúc hiện hành:** Là mô hình **Single Local Library** (mỗi dự án chọn 1 thư viện cục bộ, nạp qua `load_skill({skill})`, trạng thái Selected/Loaded/Missing - xem [`Single_Library.md`](../testing/how_to_test/Single_Library.md)).
+> - **Current skill contract:** [project skill toggles](../guides/skill-management.md): per-package manifests, ON/OFF/ERROR and automatic per-turn injection. Earlier load/grant/lock/core-optional semantics in reports are archival evidence, not current setup instructions.
 > - **Các báo cáo Sprint cũ (Phase 0 đến Sprint 2.3):** Ghi lại quá trình thử nghiệm, đo đạc dữ liệu và các mô hình trước đó (như phê duyệt mã băm SHA256, transaction grants phức tạp). Đây là tài liệu bằng chứng lịch sử, không phải hướng dẫn cài đặt hiện tại.
 
 ---

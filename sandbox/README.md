@@ -1,8 +1,21 @@
 # OpenArms sandbox
 
-Trước push dùng `npm run test:pre-push -- --base <revision>` từ root: full và
-smoke theo phạm vi trong một lượt. Xem trước bằng `--plan`. CI đặt `CI=true`
-để không tin local stamps; thiếu Docker/Python/PTY bắt buộc thì blocked.
+> **Reference only / chỉ để tham khảo.** Kiểm thử mặc định và pre-push chỉ chạy
+> trên host, không tự chạy sandbox. Các hướng dẫn container bên dưới là luồng
+> tùy chọn cũ; chỉ dùng khi chủ động yêu cầu smoke. Xem
+> [kiểm thử trên host](../docs/testing/testing.md).
+
+Current skill setup: [project toggles](../docs/guides/skill-management.md).
+The default is `/workspace/project/.openarms/packages`, all OFF, with one minimal
+manifest per package. Existing registry/skills mounts below are legacy import/
+export layouts; mounting them does not provide an automatic runtime fallback.
+Use a manifest root explicitly for external libraries. There is no model-facing
+load tool; static/runtime inventory checks enforce its absence. Old load/Selected/
+Loaded procedures below are historical, not current skill acceptance instructions.
+
+Trước push dùng `npm run test:pre-push -- --base <revision>` từ root: full trên
+host, không smoke. Xem trước bằng `--plan`. Docker/Python/PTY chỉ là điều kiện
+cho smoke được yêu cầu tường minh, không phải điều kiện kiểm thử host.
 Xem [bảng quyết định](../docs/testing/testing.md) và
 [Sprint 0.4](../docs/testing/how_to_test/Sprint_04.md).
 Toàn bộ ca static/runtime/TUI, tám ca thủ công, offline container, điều kiện,
@@ -24,7 +37,7 @@ Yêu cầu Docker Engine và Compose v2 trở lên. Chạy từ repository:
 npm run sandbox -- start
 ```
 
-Bộ chạy thống nhất chỉ chạy smoke khi policy yêu cầu: static offline trước, dùng
+Bộ chạy thống nhất chỉ chạy smoke khi được yêu cầu tường minh: static offline trước, dùng
 lại stamp pass nếu đầu vào không đổi, kiểm tra nhãn fingerprint để dùng lại/build
 image. Khi cần, chỉ build runtime image một lần trong lượt gọi. Smoke dùng project
 tạm với volume sạch và cleanup riêng, không dùng state của `start` thủ công.
@@ -46,6 +59,14 @@ cần start để tiếp tục thử; không cần cài lại, reset auth hay fu
 Build không ghi đè template config đã tồn tại trong volume; kiểm tra/sửa config
 có chủ đích khi template thay đổi. Lần chạy OpenCode đầu tiên có thể cần tải dependency và
 metadata; smoke test cho phép tối đa 120 giây cho mỗi request khởi tạo.
+
+The verification runner builds fingerprinted `openarms-sandbox:repository-…`
+images; passing verification does **not** refresh the default manual
+`openarms-sandbox:local` image. Refresh that snapshot explicitly with
+`npm run sandbox -- build cli`, then exit the existing interactive container
+when convenient and run `npm run sandbox -- start` again. Rebuilding a tag does
+not update a running container. Keep the existing volumes/config/state; do not
+use `reset` to pick up source changes.
 
 `test` chạy core/server tests offline, không có volume runtime, không phải full
 suite host. `smoke`/`smoke-runtime` khởi động server nội bộ, kiểm tra binary,

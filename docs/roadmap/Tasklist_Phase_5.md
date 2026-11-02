@@ -1,5 +1,11 @@
 # Tasklist Phase 5: Smart Context Meter & Seamless Session Handoff Lifecycle
 
+**Skill-toggle amendment:** current handoff captures project-scoped enabled
+`package/skill` IDs and relies on safe automatic target injection for activation.
+Selected/Loaded and `load_skill` steps in the original plan below are superseded
+by [skill management](../guides/skill-management.md). This does not enable the
+independent automatic threshold detector or change exclusive-controller guards.
+
 Mục tiêu phase: Xây dựng hệ thống đo lường và hiển thị trực quan dung lượng Context Window thời gian thực (Real-time Context Widget với vòng tròn % và đổi màu động trên TUI), cơ chế 3 ngưỡng cảnh báo lũy tiến (50% chuẩn bị ngầm, 75% gợi ý xoay vòng tại Task Boundary, 100% cảnh báo bão hòa), cùng bộ điều phối chuyển giao phiên 1-click tự động (1-Click Auto-Resume Engine) kế thừa kỹ năng đã chọn (`Selected`) và nạp tóm tắt `progress.md` sang session mới.
 
 ---
@@ -80,14 +86,14 @@ flowchart TD
   - Tính toán tỷ lệ phần trăm $Utilization = \frac{CurrentTokens}{ContextLimit}$, chuẩn hóa từ 0.0 đến 1.0. Xử lý trường hợp không xác định model limit bằng giá trị dự phòng an toàn (128.000 tokens).  
   *(Estimate: 1 day)*
 
-- [ ] **TSK-502 - Overview:** Thiết kế và render SolidJS Context Widget tại Prompt Box.  
+- [x] **TSK-502 - Overview:** Thiết kế và render SolidJS Context Widget tại Prompt Box.
   **Details:**  
   - Sử dụng `@opentui/solid` để tạo component `ContextMeterWidget` nhúng vào slot `session_prompt` tại [`plugins/skill-router-tui.tsx`](file:///home/hodangthaiduy/Workspace/Extensions/OpenArms/plugins/skill-router-tui.tsx).
   - Đặt vị trí widget tại góc dưới bên phải của khung nhập liệu (bên dưới hoặc ngang hàng với cursor prompt).
   - Tối ưu hóa hiệu năng render: sử dụng SolidJS `createMemo` để chỉ re-render widget khi số token thay đổi quá 1% hoặc khi chuyển bước ngưỡng, tránh re-render liên tục gây giật lag TUI.  
   *(Estimate: 1.5 days)*
 
-- [ ] **TSK-503 - Overview:** Hệ thống mã màu động và biểu tượng đĩa tròn Unicode (Dynamic Theme Engine).  
+- [x] **TSK-503 - Overview:** Hệ thống mã màu động và biểu tượng đĩa tròn Unicode (Dynamic Theme Engine).
   **Details:**  
   - Ánh xạ tỷ lệ phần trăm sang các biểu tượng đĩa tròn:
     - $0\% \le x < 25\%$: `○` (rỗng)
@@ -113,9 +119,44 @@ flowchart TD
 
 ---
 
+Sprint 5.1 implementation notes: the widget uses the public Prompt `right` property
+inside `session_prompt`, with theme colors, threshold-aware memoization and a
+disposed 500ms critical blink/update timer. Click or Ctrl+Space opens the host's
+medium modal (the public dialog API has no prompt-anchored popover placement).
+Esc closes it without modifying the prompt. Handoff currently displays manual
+review/operator instructions only; it does not create sessions or auto-submit.
+TSK-504 remains open for the anchored popover/operational handoff UX.
+
+TSK-501 currently shows the latest **completed recorded assistant message**, not
+live partial streaming revisions: `message.updated` completion metadata provides
+the durable revision boundary, while streaming snapshots have no verified
+monotonic revision. `chat.params` publishes model context limits through atomic
+numeric metadata shared by server/TUI. Unknown/invalid limits use 128000; missing
+token categories remain unknown, never zero. Occupancy estimates sum fresh input,
+output, cache read and cache write once (reasoning is already in output); session
+USD sums retained deduplicated billed messages separately. A model switch hides
+old-model occupancy until a matching sample arrives. This is provider-reported
+occupancy, not an exact tokenizer measurement or a savings claim. TSK-501 remains
+open for verified partial-stream ordering. No Sprint 5.2/5.3 lifecycle is enabled.
+Rendering/terminal placement still requires the classifier's synthetic PTY check;
+isolated numeric/key tests alone do not prove terminal acceptance.
+
 ### Sprint 5.2: Progressive 3-Tier Threshold Engine (50% - 75% - 100%)
 
 **Sprint Goal:** Xây dựng bộ điều phối logic 3 tầng ngưỡng cảnh báo và hành động, đảm bảo tuyệt đối không làm gián đoạn khi Agent đang thực thi công việc dở dang.
+
+**Implementation status (fail-closed):** `src/progressive-rotation.ts` provides an
+API-only tier engine, bounded sanitized RAM draft, explicit completion attestation
+adapter and lifecycle presenter ports. Automatic host alerts remain disabled:
+public idle/message/tool snapshots do not prove atomic completion of the latest
+primary-agent user turn. TSK-505–508 remain unchecked; config-file loading,
+automatic fact extraction, concrete host companion/modal wiring and operational
+Sprint 5.3 handoff remain incomplete. Defaults are 50/75/100%; >90% is an early
+critical warning (distinct from configured saturation). No cache-trend claim is
+made without evidence. No session is created, cleared, submitted or resumed.
+Review hardening: invalid frame rejection, session/model-scoped cross-turn tier
+deduplication, generation-owned presenter callbacks/timers, and pre-sanitizer
+4096-character fact limits with malformed-input omission are regression-tested.
 
 - [ ] **TSK-505 - Overview:** Bộ đánh giá ngưỡng ngữ cảnh tại Task Boundary (Task Boundary Evaluator).  
   **Details:**  
@@ -161,9 +202,20 @@ flowchart TD
 
 ### Sprint 5.3: 1-Click Auto-Resume & Seamless Handoff Orchestrator
 
+Implementation status: user-confirmed operational path is wired to Context meter
+Handoff; source draft is prepared by the operator, reviewed in full, then confirmed.
+Operational support requires explicit exclusive single-controller ownership;
+multi-client concurrent use is unsupported, with no host atomicity guarantee.
+This does not depend on or enable the missing 5.2 automatic detector. TSK-510/511
+have concrete SDK/TUI wiring and offline orchestration/state-store tests, but remain
+unchecked pending actual host interaction acceptance. TSK-512 has real server-side
+successful-load acknowledgement wiring and synthetic integration evidence only;
+autonomous first-turn model invocation is **not proven**. See
+[Sprint 5.3](../testing/how_to_test/Sprint_53.md) for recovery and evidence limits.
+
 **Sprint Goal:** Hiện thực hóa quy trình chuyển giao phiên tự động: đóng gói `progress.md`, mở session mới `/new`, kế thừa kỹ năng đã chọn (`Selected`) và nạp tóm tắt khởi đầu mượt mà.
 
-- [ ] **TSK-509 - Overview:** Trình đóng gói nguyên tử `.openarms/progress.md` (Atomic Handoff Publisher).  
+- [x] **TSK-509 - Overview:** Trình đóng gói nguyên tử `.openarms/progress.md` (Atomic Handoff Publisher).
   **Details:**  
   - Tái sử dụng [`src/session-handoff.ts`](file:///home/hodangthaiduy/Workspace/Extensions/OpenArms/src/session-handoff.ts):
     - Đảm bảo định dạng chuẩn mực 7 mục bắt buộc: `Objective`, `Completed`, `Active`, `Decisions`, `Verification`, `Relevant Files`, `Next Step`.

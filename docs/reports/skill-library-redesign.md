@@ -1,5 +1,11 @@
 # Single local library redesign — completion evidence
 
+**Historical report:** these results apply to the earlier single-library loader,
+not the [project-toggle migration](../guides/skill-management.md). Central registry,
+Selected/Loaded, topic selectors and model-facing load APIs are no longer active
+adapter contracts. Retain the original evidence below without treating it as
+acceptance of per-package manifests or automatic injection.
+
 ## Canonical root identity P1 follow-up (2026-10-12)
 
 Task `skill-library-root-identity` compares both canonical root and registry hash
