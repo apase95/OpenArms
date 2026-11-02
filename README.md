@@ -1,74 +1,78 @@
 <p align="center">
   <img src="docs/assets/openarms-logo.svg" alt="OpenArms logo" width="560">
 </p>
+<h1 align="center">OpenArms</h1>
+<p align="center">Project skills and runtime controls for OpenCode.</p>
+<p align="center">
+  <a href="#getting-started">Get started</a> ·
+  <a href="docs/guides/skill-management.md">Skill guide</a> ·
+  <a href="docs/guides/local-opencode.md">Optional profiles</a> ·
+  <a href="LICENSE">MIT license</a>
+</p>
 
-### Opt-in verification before push / CI
+## Overview
 
-Use `npm run test:pre-push -- --base <revision> --plan`, then the same command
-without `--plan`. Replace `<revision>` with the reviewed base commit, such as
-`origin/main`. Full host Node tests run once; sandbox is not scheduled. CI uses
-`CI=true npm run test:pre-push -- --base <revision>` with enough Git history.
-Docker/Python/PTY are needed only for explicit legacy smoke requests, not normal
-verification. No hook is installed automatically.
-See [commands](docs/testing/testing.md) and [Sprint 0.4](docs/testing/how_to_test/Sprint_04.md).
+OpenArms is a plugin layer for [OpenCode](https://github.com/anomalyco/opencode),
+not an OpenCode fork or distribution. It lets you turn project skills ON or OFF
+and adds controls for tool output, usage reports, and context tracking.
 
-OpenArms provides project skill toggles and runtime governance for
-[OpenCode](https://github.com/anomalyco/opencode). Enabled instructions are
-automatically injected each turn; every skill is independently ON/OFF.
-See the [current format, commands and migration guide](docs/guides/skill-management.md).
+A skill is a local file with instructions. Skills start OFF. When you enable a
+skill, the server adds its instructions to the system prompt on every turn.
+There is no model-facing `load_skill` tool. OpenCode runs your chosen provider
+and model; OpenArms does not bundle one or choose a fallback.
 
-## Current Scope
+## Main features
 
-Sprint 4.5 is **partial**, not accepted: [KPI protocol and remaining work](docs/testing/how_to_test/Sprint_45.md).
-`/skills install [--local|--global] [--overwrite] <https-github-url>` now runs the
-audited fetch/decompile/register pipeline with an explicitly entered provider/model,
-separate source-send/write consent and optional confirmed library switch. Use the
-`install` menu action for interactive URL entry. No model or library fallback.
-The paired UsageStore reporting API does not prove live savings; Routing Index and
-50 real comparative tasks remain outstanding.
+| Feature | What it does |
+| --- | --- |
+| Project skill controls | Manage ON/OFF/ERROR states from `/skills` in the TUI. |
+| Simple local packages | Read package manifests from `.openarms/packages`; no central registry is needed. |
+| Safe, bounded reads | Check file paths and limit how much skill content enters a turn. |
+| Reviewed installation | Ask for review and separate consent before sending source or writing an install. |
+| Output and usage controls | Shorten large tool output and report usage and context information. |
+| Optional workflow prompts | Provide controller, scout, and implementer examples where supported. |
 
-- Intercepts `/skills` in the OpenCode TUI.
-- Defaults to `.openarms/packages` within the canonical project, with a confirmed external-directory override in Status.
-- Discovers minimal per-package manifests; no central registry is needed.
-- Injects ON skill instructions automatically every turn; no model-facing skill load tools.
-- Shows ON/OFF/ERROR. Packages provide bulk toggles, not an authorization layer.
-- Persists project-scoped enabled IDs with cooperative state transactions and safe contained reads.
-- Bundles only skills with an explicit license. Each bundled skill retains its
-  own license file.
+## Architecture
 
-Use turns skills ON; remove/disable/clear turns them OFF for future injection.
-Old conversation content remains; toggles do not require a new session.
-Directory changes default to Cancel; confirming resets project toggles to OFF.
-See the [skill-management guide](docs/guides/skill-management.md), including the
-explicit migration and remaining verification limitations.
-Sprint 2.3/2.4 guides retain historical verified-loader evidence, not required
-current setup. The migration has passed offline full tests and generated-data
-Docker runtime/TUI smoke. This does not establish live-provider instruction
-following or the independent comparative-savings acceptance targets.
+OpenCode owns model calls and host permissions. The server and TUI adapters
+share a local runtime for packages and project state.
 
-## Development
-
-Requirements: Node.js 22 or newer.
-
-```bash
-npm ci
-npm run test:plan
-npm test -- --task task-123
+```mermaid
+flowchart TD
+    TUI[OpenCode TUI controls] -->|commands| TA[TUI adapter]
+    TA -->|manage skills| R[Shared local runtime]
+    H[OpenCode hooks] -->|turn events| SA[Server adapter]
+    SA -->|read enabled skills| R
+    R -->|read| F[Package manifests and skill files]
+    R -->|read and write| S[Project toggle state]
+    R -->|enabled instructions| P[System prompt]
+    P -->|via OpenCode| M[Your provider and model]
 ```
 
-`npm test` uses the unified runner to select host syntax and related/full Node tests.
-Sandbox smoke is never selected automatically. Use repeated `--file <path>`
-for an explicit task scope or `--base <revision>` for committed changes.
-`npm run test:full` explicitly requests the complete suite. Unknown paths return
-`needs-review`. See [test policy and baseline collection](docs/testing/testing.md).
+```text
+src/                         Shared core and local runtime
+plugins/                     Server and TUI adapters
+prompts/                     Optional workflow instructions
+examples/local-opencode/     Config examples to review and merge
+docs/                        Guides, architecture, and testing
+```
 
-Checks return compact summaries and preserve raw output in `.openarms/logs/`.
-Two identical failures on unchanged inputs block a third retry; after diagnosis,
-use `--force --reason "<intentional rerun reason>"` to override. See the
-[Sprint 0.1–0.3 report](docs/reports/sprints/report_sprint_01_02_03.md) for implementation evidence.
+## Getting started
 
-Install the dependencies, then reference the server entry point in your
-OpenCode `opencode.json`:
+### 1. Install the checkout
+
+You need **Node.js 22 or newer**, Git, and an installed OpenCode.
+Keep the checkout in a stable location.
+
+```bash
+git clone https://github.com/apase95/OpenArms.git
+cd OpenArms
+npm ci
+```
+
+### 2. Register both plugins
+
+Manually merge the server entry into your OpenCode `opencode.json`:
 
 ```json
 {
@@ -78,7 +82,7 @@ OpenCode `opencode.json`:
 }
 ```
 
-Register the TUI entry point separately in `tui.json` alongside that config:
+Merge the TUI entry separately into `tui.json` alongside that config:
 
 ```json
 {
@@ -88,67 +92,84 @@ Register the TUI entry point separately in `tui.json` alongside that config:
 }
 ```
 
-Optional [controller/scout/implementer profiles](docs/guides/local-opencode.md)
-and portable prompts are provided as manually reviewed examples, not an installer.
-Provider/model choices remain yours; no credentials, private endpoints, personal
-permissions or installed configuration are copied or overwritten.
+Replace `/absolute/path/to/OpenArms` with your checkout's absolute path.
+Keep existing settings and plugin entries; do not replace your whole config.
+Restart OpenCode, then open `/skills` in your project.
 
-OpenArms writes runtime state to `$XDG_STATE_HOME/openarms/state.json`, falling
-back to `~/.local/state/openarms/state.json`. This file is never part of the
-repository.
+### 3. Add your first skill
 
-## Architecture
+In the project where you use OpenCode, create these files under its canonical
+project root (the resolved project directory):
 
-Platform-independent core modules live in `src/`. The two entry points in
-`plugins/` adapt OpenCode hooks and TUI events to that core. Both adapters use
-the local-library runtime to initialize project configuration, package manifests
-and state paths. `src/local-library.ts` implements the default/explicit directory,
-project toggles and contained reads; `src/skills-service.ts` handles local commands.
-The server automatically injects enabled instructions through its system transform;
-no model-facing skill-content tool is registered.
+```text
+.openarms/packages/writing/
+├── package.json
+└── edit.md
+```
 
-See the [`docs` index](docs/README.md) for the user guide, runtime flow, state
-model, security boundaries, onboarding, and architecture. Package availability
-comes only from the library you choose.
+Put this manifest in `package.json`:
 
-## Sandbox (reference-only, explicit opt-in)
+```json
+{"skills":{"edit":"edit.md"}}
+```
 
-Docker Compose provides isolated OpenCode config, state, databases, cache, and a
-disposable project, pinned to the locally verified OpenCode version:
+Write a small instruction in `edit.md`, for example:
 
-It is retained for historical diagnostics, not the normal development/test path.
-Do not start it for ordinary verification. Explicit legacy commands are documented
-in [`sandbox/README.md`](sandbox/README.md).
+```markdown
+# Clear writing
+Use short sentences. Keep the original meaning when editing text.
+```
 
-The runner checks static contracts first, reuses fingerprinted pass results and
-builds only when the required runtime image has no matching fingerprint label. Explicit
-`npm run test:smoke` and `npm run test:tui-smoke` remain available for diagnostics;
-do not run all sandbox checks for every edit. `npm run sandbox -- test` is a
-low-level diagnostic command.
+In OpenCode, run `/skills list writing`, then `/skills use writing`.
+Check `/skills status` and send a writing task. The skill ID is `writing/edit`.
+Use `/skills disable writing` to turn it OFF for future turns.
 
-Use `npm run test:smoke-static` for offline contracts, or add `-- --force` to a
-smoke command to rerun with a matching image; `-- --rebuild` also forces a build.
-Runner-managed smoke uses temporary isolated volumes and cleans them after each
-run. See [smoke contracts and cache](docs/testing/smoke-contract.md).
+Toggles apply to the project, not just one session. OFF does not erase earlier
+conversation content. A confirmed directory change in Status resets skills to
+OFF; no global library is selected automatically. Copying the repository's
+`skills/` folder alone does not register skills.
+See the [skill guide](docs/guides/skill-management.md) for commands and migration.
 
-Add `--installed` to `start` or unified smoke commands to expose the locally installed router's
-registry and skill library read-only, with a separate set of sandbox volumes.
-Then explicitly choose `/opt/installed-router` in Status; repository sandbox
-users can choose `/opt/openarms`, or a valid project library folder. A host path
-is not reachable inside the container unless mounted. Mounting is not selection.
-See [`sandbox/README.md`](sandbox/README.md) for authentication, fixtures, and reset.
+## Development
 
-The source repository intentionally excludes OpenCode runtime data, auth files,
-databases, logs, backups, local state, and skills without verified licensing.
+From the repository root, install dependencies and review the task's test plan:
 
-## OpenCode Fork
+```bash
+npm ci
+node scripts/arms-test.mjs verify --plan --file README.md --task my-task
+npm test -- --file README.md --task my-task
+```
 
-Compatibility work is tracked separately in
-[`apase95/opencode`](https://github.com/apase95/opencode), a fork of the MIT
-licensed upstream project. Keeping the fork separate allows OpenArms to remain
-a focused plugin rather than a full OpenCode distribution.
+Replace `README.md` with your task's full scope. Repeat `--file <path>` for each
+changed, new, or removed file, or use `--base <revision>` for committed changes.
+Explicit files replace Git discovery. `npm run test:plan` previews the plan for
+Git changes. The unified runner selects host checks; docs-only edits skip code
+tests. Unknown paths need a reviewed policy mapping.
+
+See the [testing guide](docs/testing/testing.md) for syntax checks and opt-in
+pre-push verification. Sandbox checks are reference-only and never run by default.
+
+## Limits and privacy
+
+- Skill instructions are trusted input, not security isolation or OS permissions.
+  ON means readable and enabled, not proof that a model follows the instructions.
+- Usage reports do not enforce a budget. Automatic session rotation and measured
+  token or cost savings are not promised.
+- Host checks and pinned dependencies do not certify live OpenCode compatibility
+  or provider behavior. Review your setup before relying on it.
+- Keep credentials, runtime data, logs, and local state out of Git. OpenArms state
+  uses `$XDG_STATE_HOME/openarms/state.json`, or `~/.local/state/openarms/state.json`.
+  Setup does not copy authentication or overwrite installed configuration.
+
+## Documentation
+
+- [Project skills: format, controls, and migration](docs/guides/skill-management.md)
+- [Optional controller/scout/implementer profiles](docs/guides/local-opencode.md)
+- [Architecture](docs/architecture/README.md)
+- [Testing policy and commands](docs/testing/testing.md)
+- [Full documentation index](docs/README.md) — includes historical designs and reports.
 
 ## License
 
-OpenArms engine code is released under the MIT License. Bundled skills are
-distributed under the license contained in each skill directory.
+The OpenArms engine uses the [MIT License](LICENSE). Bundled skills keep their
+own license files; only skills with an explicit license are included.
