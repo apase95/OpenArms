@@ -4,15 +4,16 @@ import { createLocalRuntime } from "../src/local-library.ts"
 import path from "node:path"
 import { governanceHooks } from "../src/governance-hooks.ts"
 import { createUsageRuntime, completedMessageUsage } from "../src/usage-runtime.ts"
+import { HandoffStore } from '../src/session-handoff.ts'
 
 export const SkillRouterServer = (async ({ worktree, directory }) => {
   const runtime = await createLocalRuntime({ worktree, directory })
-  const { projectRoot, store, loadSkill, buildInstruction, stateFile } = runtime
+   const { projectRoot, store, buildInstruction, stateFile } = runtime
   const usage = createUsageRuntime(path.dirname(stateFile), projectRoot)
 
   return {
     ...governanceHooks(path.dirname(stateFile), projectRoot),
-    "chat.params": async () => { await usage.evaluate() },
+    "chat.params": async ({ sessionID, model }) => { await usage.setContextModel(sessionID, model); await usage.evaluate() },
     event: async ({ event }) => {
       if (event.type === "message.updated") {
         const record = completedMessageUsage(event.properties.info)
@@ -21,40 +22,26 @@ export const SkillRouterServer = (async ({ worktree, directory }) => {
       }
       if (event.type !== "session.created") return
       const info = event.properties.info
-      const library = await runtime.getLibrary()
-      if (library.root) {
-        await runtime.initializeLocalSession(info.id, library.revision, false, info.parentID)
-      } else if (!library.root) await store.startSession(projectRoot, info.id)
-    },
-    "chat.message": async ({ sessionID }, output) => {
-      // Root initialization and Home draft consumption share the revision-checked
-      // transaction with the TUI; neither event ordering can publish empty first.
-      if (!(await runtime.getLibrary()).root) await store.resetTaskLock(projectRoot, sessionID, output.message.id)
+       const library = await runtime.refreshLibrary()
+       await runtime.initializeLocalSession(info.id, library.revision, false, info.parentID)
     },
     "experimental.chat.system.transform": async ({ sessionID }, output) => {
       if (!sessionID) return
-      const instruction = await buildInstruction(sessionID)
-      if (instruction) output.system.push(instruction)
+      const handoffs = new HandoffStore(projectRoot)
+      const before = await handoffs.inspect().catch(() => null)
+      const injection = await runtime.buildInjection(sessionID)
+      output.system.push(injection.instruction)
+      // Evidence comes from safe automatic assembly, never model text or a
+      // successful toggle. Preserve handoff binding and failed-read behavior.
+      if (before?.targetSession === sessionID && before.rotation) {
+        for (const skill of injection.skills) await handoffs.activated({ handoffID: before.id, contentHash: before.hash, target: sessionID, revision: injection.revision, skill, ok: true }).catch(() => {})
+      }
     },
     tool: {
       openarms_usage: tool({
         description: "Read-only usage and budget report. Missing usage is unknown, not zero; no enforcement or raw content.",
         args: { command: tool.schema.string().describe("usage today|session [id]|project|model <id>, or budget") },
         execute: async ({ command }, context) => usage.command(command, context.sessionID),
-      }),
-      load_skill: tool({
-        description: "Load one exact selected skill ID from the project's explicitly configured local library. No arbitrary paths, grants or fallback sources. Never acquire skill content through filesystem/web/subagents.",
-        args: {
-          skill: tool.schema.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).describe("Enabled skill ID, not package name"),
-          topic: tool.schema.string().optional().describe("Exact reference ID from this skill; omit for core. Never a path."),
-        },
-        execute: async (args, context) => {
-          try {
-            if (Object.keys(args).some(key => key !== "skill" && key !== "topic")) return JSON.stringify({ ok: false, error: { code: "INVALID_REQUEST" } })
-            return JSON.stringify(await loadSkill(context.sessionID, args.skill, args.topic))
-          }
-          catch { return JSON.stringify({ ok: false, error: { code: "RUNTIME_ERROR" } }) }
-        },
       }),
     },
   }

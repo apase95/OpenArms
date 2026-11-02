@@ -1,5 +1,10 @@
 # Cách tự kiểm tra các task đã triển khai
 
+> Current skill setup and manual checks: [project skill toggles](../guides/skill-management.md).
+> Sprint guides referring to load tools, grants, task locks, core/optional or
+> Selected/Loaded describe historical contracts. Their passing results do not
+> certify the automatic-injection redesign; use ON/OFF/ERROR for new tests.
+
 Tài liệu này dành cho người muốn tự thao tác, quan sát màn hình hoặc chạy script
 để xác nhận một tính năng hoạt động đúng. Tra cứu lệnh tại [testing.md](testing.md).
 

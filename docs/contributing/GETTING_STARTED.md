@@ -22,8 +22,8 @@ Chào mừng bạn đến với dự án **OpenArms**! Hướng dẫn này đư�
 
 1. **Local Skill Routing & Isolation (Điều hướng Skill Cục bộ):**
    - Mỗi dự án chỉ chọn đúng **một thư mục thư viện skill cục bộ** (`library root`).
-   - Kiểm soát định danh skill chính xác (`load_skill({skill})`) với safe path để ngăn chặn duyệt file trái phép ra ngoài thư viện.
-   - Quản lý trạng thái skill (`Selected`, `Loaded`, `Missing`) minh bạch theo từng phiên làm việc (session).
+   - Default `.openarms/packages`, per-package manifests, safe reads and automatic per-turn system injection; no model-facing loader.
+   - Project-scoped ON/OFF/ERROR for every skill. Packages are bulk toggles, not grants. See [skill management](../guides/skill-management.md).
 2. **Runtime Governance & Budgeting (Quản trị Runtime & Ngân sách):**
    - Đo lường token và chi phí thực thi theo ngày, phiên và dự án.
    - Đưa ra cảnh báo ngân sách sớm và kiểm soát output của công cụ để tránh làm tràn ngập cửa sổ ngữ cảnh (context window) của LLM.
@@ -36,10 +36,13 @@ Chào mừng bạn đến với dự án **OpenArms**! Hướng dẫn này đư�
 ## 2. Yêu cầu Môi trường & Cài đặt
 
 ### Yêu cầu phần mềm:
-- **Node.js:** Phiên bản `18.x` trở lên (khuyến nghị Node 20+).
+- **Node.js:** Phiên bản 22 trở lên.
 - **npm:** Đi kèm Node.js.
 - **Docker & Docker Compose:** Cần thiết nếu chạy bộ kiểm thử hộp cát (sandbox smoke tests).
-- **Python 3 & thư viện PTY:** Cần thiết để chạy bộ kiểm thử giao diện dòng lệnh tương tác (`tui-smoke.py`).
+- **Python 3 & thư viện PTY:** Chỉ cần cho legacy TUI smoke được yêu cầu tường minh; không cần cho verify/pre-push.
+
+Normal verification and pre-push are host-only. Keep sandbox as reference; no
+automatic Docker/PTY tests. See [optional local profiles](../guides/local-opencode.md).
 
 ### Các bước cài đặt:
 
@@ -49,7 +52,7 @@ git clone https://github.com/hodangthaiduy/OpenArms.git
 cd OpenArms
 
 # 2. Cài đặt các gói phụ thuộc
-npm install
+npm ci
 
 # 3. Kiểm tra cú pháp toàn dự án
 node scripts/arms-test.mjs syntax
@@ -106,7 +109,7 @@ Dự án OpenArms áp dụng cơ chế phân tầng kiểm thử nghiêm ngặt 
 - **T0 (`syntax`):** Kiểm tra cú pháp TypeScript/Node. Chạy nhanh trong vài giây.
 - **T1 (`related`):** Chạy các unit/integration test bị ảnh hưởng trực tiếp bởi file thay đổi.
 - **T2 (`full`):** Chạy toàn bộ test suite. Chỉ kích hoạt khi thay đổi core dùng chung hoặc hạ tầng test.
-- **T3 (`smoke`):** Kiểm thử môi trường thật/sandbox:
+- **T3 (`smoke`):** Legacy/reference-only, chỉ chạy khi yêu cầu tường minh:
   - `smoke-static`: Kiểm tra offline không cần Docker.
   - `smoke-runtime`: Kiểm tra container Docker.
   - `tui-smoke`: Kiểm tra tương tác TUI qua giả lập PTY.

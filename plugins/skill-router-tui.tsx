@@ -1,24 +1,153 @@
 /** @jsxImportSource @opentui/solid */
-import { For, Show, createMemo, createSignal } from "solid-js"
+import { For, Show, createMemo, createSignal, onMount, onCleanup } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { detectPackages } from "../src/project.ts"
 import { orderedPackageNames, packageLabel, parseCommand } from "../src/commands.ts"
 import { executeLocalSkillsCommand } from "../src/skills-service.ts"
 import { createLocalRuntime } from "../src/local-library.ts"
 import { HOME_SESSION as homeSession } from "../src/state-store.ts"
-import { chooseVerifiedConfirmation, confirmationKey, sessionAction, interceptLocalPrompt, registerLocalSubmit, watchUsagePrompt } from "./tui-core.ts"
+import { chooseVerifiedConfirmation, confirmationKey, sessionAction, interceptLocalPrompt, registerLocalSubmit, watchUsagePrompt, registerContextKey, createHandoffTransport } from "./tui-core.ts"
 import path from "node:path"
-import { createUsageRuntime, type BudgetEditAction } from "../src/usage-runtime.ts"
+import { createUsageRuntime, contextBand, contextChanged, contextSnapshot, type ContextSnapshot, type BudgetEditAction } from "../src/usage-runtime.ts"
 import { appendFile } from "node:fs/promises"
 import { chooseAuditDialog, stageSkillAudit, type AuditOverrideRecord } from "../src/skill-audit-review.ts"
 import { installSkill } from "../src/skill-install-pipeline.ts"
 import { createOpenCodeModelAdapter, requireDecompilerModel } from "../src/skill-model-adapter.ts"
+import { HandoffStore } from '../src/session-handoff.ts'
+import { AutoSessionRotator } from '../src/auto-session-rotator.ts'
 
 type PickerOption = {
   title: string
   value: string
   description?: string
   descriptionAlign?: "left" | "right"
+}
+
+function ContextBreakdown(props: { api: any; state: () => ContextSnapshot; onHandoff?: () => void }) {
+  const [handoff, setHandoff] = createSignal(false)
+  const [selected, setSelected] = createSignal<"handoff" | "close">("handoff")
+  const close = () => props.api.ui.dialog.clear()
+  const theme = props.api.theme.current
+  const trigger = (action: "handoff" | "close") => {
+    if (action === "handoff") {
+      if (props.onHandoff) {
+        close()
+        setTimeout(() => props.onHandoff?.(), 100)
+      } else setHandoff(true)
+    } else {
+      close()
+    }
+  }
+  useKeyboard(event => {
+    if (event.name === "escape") {
+      event.preventDefault()
+      event.stopPropagation()
+      close()
+      return
+    }
+    if (["left", "right", "tab"].includes(event.name)) {
+      event.preventDefault()
+      event.stopPropagation()
+      setSelected(current => current === "handoff" ? "close" : "handoff")
+      return
+    }
+    if (event.name === "return" || event.name === "enter" || event.name === "space") {
+      event.preventDefault()
+      event.stopPropagation()
+      trigger(selected())
+      return
+    }
+    if (event.name === "h") {
+      event.preventDefault()
+      event.stopPropagation()
+      trigger("handoff")
+      return
+    }
+  })
+  const number = (value: number | undefined | null) => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("en-US") : "unknown"
+  return (
+    <box flexDirection="column" gap={1} paddingLeft={2} paddingRight={2} paddingBottom={1} width="100%">
+      <box flexDirection="row" justifyContent="space-between" width="100%">
+        <text fg={theme.text}><b>Context · Latest recorded turn</b></text>
+        <text fg={theme.textMuted} onMouseUp={close}>esc</text>
+      </box>
+      <box flexDirection="column" gap={0}>
+        <text fg={theme.text}>Input: {number(props.state().metrics?.freshInput)}</text>
+        <text fg={theme.text}>Output: {number(props.state().metrics?.output)}</text>
+        <text fg={theme.text}>Cache read: {number(props.state().metrics?.cacheRead)}</text>
+        <text fg={theme.text}>Cache write: {number(props.state().metrics?.cacheWrite)}</text>
+        <text fg={theme.text}>Session USD estimate: {props.state().costUSD === null ? "unknown" : `$${props.state().costUSD!.toFixed(4)}`}</text>
+        <text fg={theme.text}>Context limit: {number(props.state().limit)}</text>
+      </box>
+      <Show when={handoff()}>
+        <text wrapMode="word" fg={theme.textMuted}>
+          Manual handoff: ask the agent to prepare a sourced, sanitized 7-section summary, at most 30 lines. Review and save it, then open /new and provide the summary.
+        </text>
+      </Show>
+      <box flexDirection="row" justifyContent="space-between" width="100%">
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={selected() === "handoff" ? theme.warning : theme.backgroundPanel}
+          onMouseOver={() => setSelected("handoff")}
+          onMouseUp={() => trigger("handoff")}
+        >
+          <text fg={selected() === "handoff" ? theme.selectedListItemText : theme.textMuted}>Handoff</text>
+        </box>
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={selected() === "close" ? theme.warning : theme.backgroundPanel}
+          onMouseOver={() => setSelected("close")}
+          onMouseUp={() => trigger("close")}
+        >
+          <text fg={selected() === "close" ? theme.selectedListItemText : theme.textMuted}>Close</text>
+        </box>
+      </box>
+    </box>
+  )
+}
+
+export function ContextMeterWidget(props: { api: any; usage: ReturnType<typeof createUsageRuntime>; sessionID: string; eligible: () => boolean; onHandoff?: () => void }) {
+  const [state, setState] = createSignal(contextSnapshot([], props.usage.project, props.sessionID))
+  const [pulse, setPulse] = createSignal(true)
+  // Billing/breakdown stays current independently of the throttled compact view.
+  const display = createMemo(() => state(), undefined, { equals: (a, b) => !!a && !contextChanged(a, b) })
+  const band = () => contextBand(display().utilization)
+  const compact = (n: number) => n >= 1000 ? `${Number((n / 1000).toFixed(1))}k` : String(n)
+  const label = createMemo(() => {
+    const value = display()
+    return value.tokens === null ? "○ unknown" : `${["○", "◔", "◑", "◕", "●"][band()]} ${Math.floor(value.utilization! * 100)}% · ${compact(value.tokens)}/${compact(value.limit)}`
+  })
+  const color = () => band() >= 4 ? (pulse() ? props.api.theme.current.error : props.api.theme.current.textMuted) : band() === 3 ? "#F97316" : band() === 2 ? props.api.theme.current.warning : (props.api.theme.current.text ?? "white")
+  const open = () => {
+    if (!props.eligible() || props.api.ui.dialog.open) return
+    props.api.ui.dialog.replace(() => <ContextBreakdown api={props.api} state={state} onHandoff={props.onHandoff} />)
+    props.api.ui.dialog.setSize("medium")
+  }
+  onMount(() => {
+    let disposed = false, busy = false
+    const refresh = async () => {
+      if (busy || disposed) return
+      busy = true
+      try { const next = await props.usage.context(props.sessionID); if (!disposed) setState(next) }
+      catch { if (!disposed) setState(contextSnapshot([], props.usage.project, props.sessionID)) }
+      finally { busy = false }
+    }
+    void refresh()
+    // message.updated can precede the server's durable write. Polling also picks
+    // up chat.params model changes across the server/TUI process boundary.
+    const unsubscribe = props.api.event.on("message.updated", (event: any) => {
+      if (event.properties.info.sessionID === props.sessionID) void refresh()
+    })
+    const pulseTimer = setInterval(() => { if (band() >= 4) setPulse(v => !v) }, 500)
+    pulseTimer.unref?.()
+    const timer = setInterval(() => { void refresh() }, 5000)
+    timer.unref?.()
+    const key = registerContextKey(props.api, props.eligible, open)
+    onCleanup(() => { disposed = true; clearInterval(pulseTimer); clearInterval(timer); unsubscribe(); key() })
+  })
+  return <text fg={color()} onMouseUp={open}>{label()}</text>
 }
 
 type CustomDialogProps = {
@@ -315,11 +444,11 @@ export async function runSkillInstallUI(api: any, input: string, runtime: Awaite
   let active = false
   if ((await runtime.getLibrary()).revision === before.revision) {
     if (before.root === result.root) { await runtime.refreshLibrary(); active = true }
-    else if (await audit.choose('Use installed library?', `Library: ${result.root}\nThis replaces the workspace library and clears selections, load history and task locks. No merge/fallback. Start /new after switching.`, 'Switch library', 'Keep current library')) {
+    else if (await audit.choose('Use installed library?', `Package directory: ${result.root}\nThis replaces the project directory and resets skill toggles to OFF. No merge/fallback. Earlier conversation content remains; no new session is required.`, 'Switch library', 'Keep current library')) {
       await runtime.configureLibrary(result.root, before.revision, true); active = true
     }
   }
-  api.ui.toast({ title: 'Skill installed', message: `${result.id}: ${result.references} references. ${active ? 'Choose /skills use to select; load exact ID/topic only when needed.' : 'Current library unchanged; configure the installed root in /skills status to use it.'} No measured token-savings claim.`, variant: 'success', duration: 12000 })
+  api.ui.toast({ title: 'Skill installed', message: `${result.id}: ${result.references} references. ${active ? 'All new skills are OFF. Use /skills use to enable automatic next-turn injection.' : 'Current directory unchanged; configure the installed root in /skills status to use it.'} No measured token-savings claim.`, variant: 'success', duration: 12000 })
   return result
 }
 
@@ -361,7 +490,6 @@ function ReadOnlyDialog(props: ReadOnlyDialogProps) {
   const lines = props.message.split("\n")
   const status = props.title === "Skill Status"
   const packages = props.title === "Skill Packages"
-  const inspect = props.title === "Skill Inspect"
   const help = props.title === "Skills Help"
   const skillList = props.title.endsWith(" Skills") && !status
   const helpRows = lines.map((line) => {
@@ -479,10 +607,10 @@ function ReadOnlyDialog(props: ReadOnlyDialogProps) {
                 </box>
               )
             }
-            if ((inspect || status || skillList) && text.startsWith("# ")) {
+            if ((status || skillList) && text.startsWith("# ")) {
               return <text fg={theme.secondary}><b>{text.slice(2)}</b></text>
             }
-            if ((inspect || status || skillList) && line.includes("\t")) {
+            if ((status || skillList) && line.includes("\t")) {
               const [skill, state = ""] = line.split("\t")
               return (
                 <box flexDirection="row" paddingLeft={1} paddingRight={1} width="100%">
@@ -502,11 +630,6 @@ function ReadOnlyDialog(props: ReadOnlyDialogProps) {
               return (
                 <box flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} width="100%">
                   <text fg={theme.text}>{text.slice(2)}</text>
-                  <box flexGrow={1} flexDirection="row" justifyContent="flex-end">
-                    <box width={"Activated".length}>
-                      <text fg={theme.textMuted}>Activated</text>
-                    </box>
-                  </box>
                 </box>
               )
             }
@@ -597,6 +720,87 @@ export default {
     const choose = (title: string, message: string, yes: string, no: string) => chooseVerifiedConfirmation(api, title, message, yes, no,
       props => <ConfirmationDialog api={api} {...props} />)
 
+    let handoffBusy = false
+    const openHandoff = async (source: string) => {
+      if (handoffBusy) return
+      handoffBusy = true
+      const controller = new AbortController()
+      let disposeKeys = () => {}, disposeLifecycle = () => {}
+      try {
+        const handoffStore = new HandoffStore(projectRoot)
+        // 1. Always take and persist the snapshot first (so the 3 files are guaranteed to be saved)
+        try {
+          const selection = await runtime.handoffSelection(source).catch(() => ({ skills: [], packages: {}, revision: "" }))
+          const messages = api.state.session.messages(source) ?? []
+          const files: string[] = []
+          for (const m of messages) {
+            for (const p of (api.state.part(m.id) ?? [])) {
+              if (p.type === 'tool' && p.args?.filePath) files.push(p.args.filePath)
+            }
+          }
+          const uniqueFiles = [...new Set(files)].slice(0, 5)
+          const saved = await handoffStore.saveSessionHandoff({
+            sessionID: source,
+            source: 'owner',
+            metadataNotes: {
+              'Active Skills': selection.skills.join(', ') || '(none)',
+            },
+            fields: {
+              Objective: [{ text: `Continue task in session ${source}`, source: 'owner' }],
+              Completed: [{ text: `Session recorded with ${messages.length} messages`, source: 'owner' }],
+              Active: [{ text: 'Review progress and continue next turn', source: 'owner' }],
+              Decisions: [{ text: 'Automated snapshot persisted by user handoff action', source: 'owner' }],
+              Verification: [{ text: 'Snapshot verified and saved to .openarms/handoff/', source: 'owner' }],
+              'Relevant Files': uniqueFiles.length ? uniqueFiles.map(f => ({ text: f, source: 'owner' })) : [{ text: '.openarms/progress.md', source: 'owner' }],
+              'Next Step': [{ text: 'Proceed with next objective or rotated session', source: 'owner' }],
+            }
+          })
+          api.ui.toast({ title: 'Handoff saved', message: `Saved to .openarms/handoff/handoff-${saved.stamp}.md and progress.md`, variant: 'success', duration: 10000 })
+        } catch (error) {
+          if (error instanceof Error && error.message === 'STALE_HANDOFF') {
+            api.ui.toast({ title: 'Handoff snapshot not replaced', message: 'An unarchived handoff already exists. Its journal and rotation state were preserved; inspect it before preparing another snapshot.', variant: 'warning', duration: 10000 })
+          }
+          // Other snapshot failures remain best-effort before rotation check.
+        }
+
+        const fingerprint = () => JSON.stringify(api.state.session.messages(source).map((m: any) => [m.id, m.time, api.state.part(m.id).map((p: any) => [p.id, p.type, p.state?.status])]))
+        const initial = fingerprint()
+        const idle = (id: string) => api.state.session.status(id)?.type === 'idle' && !api.state.session.permission(id).length && !api.state.session.question(id).length && !api.state.session.messages(id).some((m: any) => api.state.part(m.id).some((p: any) => p.type === 'tool' && ['pending', 'running'].includes(p.state?.status)))
+        const owns = (id: string) => activeSessionID === id && api.route.current.name === 'session' && api.route.current.params?.sessionID === id && !!activePrompt?.focused && activePrompt.current?.input === '' && !(activePrompt.current?.parts?.length) && activePrompt.current?.mode !== 'shell' && !api.ui.dialog.open
+        if (!owns(source) || !idle(source)) return
+        const sdkHistory = async (id: string) => {
+          const result = await api.client.session.messages({ sessionID: id }, { signal: controller.signal })
+          if (result.error || !Array.isArray(result.data)) throw Error('UNKNOWN_HISTORY')
+          return JSON.stringify(result.data)
+        }
+        const sourceHistory = await sdkHistory(source)
+        const transportFresh = async (sourceID: string, target: string) => {
+          if (await sdkHistory(sourceID) !== sourceHistory || await sdkHistory(target) !== '[]') throw Error('HISTORY_CHANGED')
+          const status = await api.client.session.status({}, { signal: controller.signal })
+          if (status.error || status.data?.[sourceID]?.type !== 'idle' || status.data?.[target]?.type !== 'idle' || !idle(sourceID) || !idle(target) || !owns(target) || controller.signal.aborted) throw Error('ACTIVITY_CHANGED')
+        }
+        const rotator = new AutoSessionRotator(handoffStore, {
+          ...createHandoffTransport(api, controller.signal, owns),
+          safe: async id => !controller.signal.aborted && fingerprint() === initial && idle(source) && owns(id) && (id === source || (idle(id) && api.state.session.messages(id).length === 0)),
+          selection: runtime.handoffSelection,
+          restore: runtime.restoreHandoffSelection,
+          gate: async (target, source, selection) => {
+            await runtime.checkHandoffSelection(target, source, selection)
+            await transportFresh(source, target)
+          },
+        })
+        const draft = await rotator.review(source)
+        if (!await choose('Review handoff · exclusive ownership required', `${draft.body}\nEnabled project IDs: ${draft.selection.skills.join(', ') || '(none)'}\nI exclusively control these sessions: no other client, agent or automation may use or change them until submission finishes. Concurrent multi-client use is unsupported; host checks are not atomic with submission. Create a fresh session and send this progress once? No source deletion or permission transfer. Automatic threshold activation remains disabled.`, 'I own exclusively: create and send once', 'Cancel')) return
+        disposeLifecycle = api.lifecycle.onDispose(() => controller.abort())
+        // Any new typing/focus operation invalidates the attempt; never clear it.
+        disposeKeys = api.keymap.intercept('key', () => { controller.abort() }, { priority: 1100 })
+        const result = await rotator.confirm(draft, controller.signal)
+        api.ui.toast({ title: 'Handoff submitted', message: `Target ${result.target}. Submission is not skill activation acknowledgement.`, variant: 'info', duration: 12000 })
+      } catch {
+        api.ui.toast({ title: 'Handoff stopped', message: 'Prepare a sourced seven-section draft with session-lifecycle first. Source must be idle with empty prompt. If attempted, inspect .openarms/handoff.json and target history; never blindly retry ambiguous create/submit. Source is retained.', variant: 'warning', duration: 15000 })
+      } finally { disposeKeys(); disposeLifecycle(); handoffBusy = false }
+    }
+
      const ensureSession = (sessionID: string, resetHome = false) => {
       const current = initializing.get(sessionID)
       if (current) return current
@@ -639,14 +843,14 @@ export default {
       const config = await runtime.getLibrary()
       api.ui.dialog.replace(() => <LibraryPathDialog api={api} initial={config.root ?? ""} onCancel={() => void run("status")}
         onSubmit={async root => {
-           const allowed = await choose("Change library path?", "Clears skill selections, load history and task locks in this workspace. Start /new after changing.", "Confirm", "Cancel")
+           const allowed = await choose("Change package directory?", "All project skill toggles reset to OFF. Subsequent turns use the new directory; earlier conversation content remains.", "Confirm", "Cancel")
           if (allowed) {
             try {
               await runtime.configureLibrary(root, config.revision, true)
               await refreshRegistry()
-              toast("Library changed", "Re-select skills. Recommended: open /new.", "success")
+               toast("Library changed", "All skills OFF. Enable the skills you want; no new session required.", "success")
             } catch {
-              toast("Library not changed", "Invalid or changed library. Choose an absolute root containing registry.json and skills/.", "error")
+               toast("Library not changed", "Invalid or changed directory. Choose an absolute directory containing per-package package.json manifests.", "error")
             }
           }
           await run("status")
@@ -662,9 +866,10 @@ export default {
         const command = parseCommand(args)
         const session = await store.getSession(projectRoot, sessionID)
         if (command.action === "clear" && Object.keys(session?.packages ?? {}).length > 0) {
+          const count = Object.keys(session!.packages).length
           const allowed = await choose(
             "Clear all skills?",
-            `Disable ${Object.keys(session!.packages).length} enabled package(s) for this session?`,
+            `Turn OFF all skills in ${count} package${count === 1 ? "" : "s"} for this project?`,
             "Clear",
             "Cancel",
           )
@@ -693,7 +898,7 @@ export default {
         const titles: Record<string, string> = {
           status: "Skill Status",
           packages: "Skill Packages",
-          inspect: "Skill Inspect",
+          inspect: "Skill Status",
           help: "Skills Help",
           list: command.action === "list" ? `${packageLabel(command.packageName)} Skills` : "Package Skills",
           use: "Skills Enabled",
@@ -748,11 +953,9 @@ export default {
       const options: Array<{ title: string; value: string; description?: string }> = skills.map((skill) => ({
         title: skill,
         value: skill,
-        description: selected.has(skill) ? "Activated" : "Optional",
+         description: selected.has(skill) ? "ON — already enabled" : "OFF",
       }))
-      if (action === "use") {
-        options.unshift({ title: definition.core.join(", "), value: "", description: "Core" })
-      }
+       if (action === "use") options.unshift({ title: 'Enable all skills in package', value: '', description: 'Bulk ON' })
       options.push(
         { title: "← Back", value: "__back__" },
         { title: "Done", value: "__done__" },
@@ -774,8 +977,8 @@ export default {
            await openSkillPicker(action, packageName, sessionID, revision)
         },
         action === "add"
-          ? "All optional skills are already enabled"
-          : "This package has no enabled optional skills to remove",
+           ? "All skills are already ON"
+           : "This package has no ON skills to turn OFF",
       )
     }
 
@@ -794,11 +997,7 @@ export default {
       const options: PickerOption[] = names.map((name) => ({
         title: packageLabel(name),
         value: name,
-        description: enabled.has(name)
-          ? "Activated"
-          : registry.packages[name].detect.always
-            ? "Available"
-            : detected.has(name) ? "Detected" : undefined,
+        description: enabled.has(name) ? "ON" : "OFF",
       }))
       options.push(
         { title: "← Back", value: "__back__" },
@@ -838,16 +1037,12 @@ export default {
       void refreshDetection(true)
       const actions: PickerOption[] = [
         { title: "status", value: "status", description: "Show enabled packages and skills" },
-        { title: "packages", value: "packages", description: "Show packages and project detection" },
-        { title: "inspect", value: "inspect", description: "Check which skills were actually loaded" },
-        { title: "list", value: "list", description: "Show skills in a package" },
-        { title: "use", value: "use", description: "Enable a package and optional skill" },
-        { title: "add", value: "add", description: "Add an optional skill" },
-        { title: "remove", value: "remove", description: "Remove an optional skill" },
-        { title: "disable", value: "disable", description: "Disable one package" },
-        { title: "clear", value: "clear", description: "Disable all packages for this session" },
+        { title: "use", value: "use", description: "Turn skills ON" },
+        { title: "remove", value: "remove", description: "Turn a skill OFF" },
+        { title: "disable", value: "disable", description: "Turn a package OFF" },
+        { title: "clear", value: "clear", description: "Turn all skills OFF" },
         { title: "help", value: "help", description: "Show command syntax" },
-        { title: "install", value: "install", description: "Install an audited GitHub skill" },
+        { title: "install", value: "install", description: "Install skill from GitHub" },
         { title: "Done", value: "__done__" },
       ].map((option) => option.value === "__done__" ? option : { ...option, descriptionAlign: "left" })
       openSelect("Select Action", "Type to filter actions", actions, async (action) => {
@@ -976,6 +1171,9 @@ export default {
       let promptRef: any
       return api.ui.Prompt({
         ...props,
+         ...(sessionID === homeSession ? {} : { right: <ContextMeterWidget api={api} usage={usage} sessionID={sessionID}
+          onHandoff={() => { void openHandoff(sessionID) }}
+          eligible={() => activeSessionID === sessionID && !!activePrompt?.focused && value.visible !== false && !value.disabled && activePrompt?.current?.mode !== "shell"} /> }),
         visible: value.visible,
         disabled: value.disabled,
         ref(next: any) {
@@ -1069,7 +1267,7 @@ export default {
       }).catch((e: Error) => {
         if (!disposed && warningError !== e.message) { warningError = e.message; toast("Budget notifications unavailable", "Policy or local storage error; requests remain allowed. Open /budget to diagnose.", "error") }
       }).finally(() => { polling = false })
-    }, 1000)
+    }, 5000)
     warningTimer.unref?.()
     api.lifecycle.onDispose(() => { disposed = true; clearInterval(warningTimer); disposeSubmit() })
   },

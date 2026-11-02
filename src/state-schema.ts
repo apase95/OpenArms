@@ -14,6 +14,7 @@ export function validateState(value: unknown): asserts value is RouterState {
     if (project.verifiedGrants !== undefined && (!Array.isArray(project.verifiedGrants) || project.verifiedGrants.length > 200
       || project.verifiedGrants.some((grant: any) => !isRecord(grant) || grant.scope !== "project" || typeof grant.skill !== "string" || typeof grant.owner !== "string" || typeof grant.project !== "string" || !/^sha256:[a-f0-9]{64}$/.test(grant.revision)))) return invalid()
     for (const session of Object.values(project.sessions)) {
+      if (session.autoSelection !== undefined && typeof session.autoSelection !== 'string') return invalid()
       if (!isRecord(session) || !selection(session.packages) || !isStringArray(session.approvedMismatch)
         || typeof session.updatedAt !== "string") return invalid()
       if ((session.selectionReady !== undefined && typeof session.selectionReady !== "boolean") || (session.childFallback !== undefined && typeof session.childFallback !== "boolean")) return invalid()

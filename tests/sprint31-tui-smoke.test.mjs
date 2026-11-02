@@ -6,12 +6,17 @@ import { execFileSync } from "node:child_process"
 const plugin = readFileSync(new URL("../plugins/skill-router-tui.tsx", import.meta.url), "utf8")
 const harness = readFileSync(new URL("../sandbox/tui-smoke.py", import.meta.url), "utf8")
 const actions = [...plugin.split("const actions: PickerOption[] = [")[1].split("].map(")[0].matchAll(/value: "([^"]+)"/g)].map(match => match[1])
-const counts = [...harness.matchAll(/keys = \[b"\\x1b\[B"\] \* (\d+)/g)].map(match => Number(match[1]))
+const statusEntry = harness.split('if phase == "open" and "Select Action" in visible:')[1].split('elif phase == "status"')[0]
 
-test("PTY downward traversal wraps the complete production picker to status", () => {
-  assert.equal(counts.length, 1)
-  assert.equal(counts[0], actions.length)
-  assert.equal(actions[counts[0] % actions.length], "status")
+test("PTY activates the initially selected production status action", () => {
+  assert.match(plugin, /\[selected, setSelected\] = createSignal\(0\)/)
+  assert.equal(actions[0], "status")
+  assert.match(statusEntry, /keys = \[b"\\r"\]/)
+})
+
+test("PTY status entry never depends on action count or traverses destructive rows", () => {
+  assert.doesNotMatch(statusEntry, /\\x1b\[B|\\x1b\[A|\] \*/)
+  assert.equal((statusEntry.match(/keys = /g) ?? []).length, 1)
 })
 
 test("synthetic PTY explicitly configures, loads and switches without grant actions", () => {
@@ -21,7 +26,7 @@ test("synthetic PTY explicitly configures, loads and switches without grant acti
     assert.ok(harness.includes(`phase == "${phase}"`))
   }
   assert.ok(harness.includes('("/arms-test-load", "Synthetic loaded", "")'))
-  assert.ok(harness.includes('("/skills inspect", "Skill Inspect", "Loaded")'))
+  assert.ok(harness.includes('("/skills inspect", "Skill Inspect", "ON")'))
 })
 
 test("PTY compact confirmations test Cancel by behavior and cover typed-space and editor", () => {
@@ -66,7 +71,8 @@ assignment = next(n for n in ast.walk(tree) if isinstance(n, ast.Assign) and any
 screen = [[" "] * 120 for _ in range(32)]
 backgrounds = [['chrome'] * 120 for _ in range(32)]
 for line in backgrounds: line[30:90] = ['panel'] * 60
-screen[12][31:51] = 'Change library path?'
+title = 'Change package directory?'
+screen[12][31:31 + len(title)] = title
 for row, text in [(13, "already"), (14, "injected content cannot be retracted.")]:
     screen[row][31:31 + len(text)] = text
 screen[14][0:10] = "BACKGROUND"

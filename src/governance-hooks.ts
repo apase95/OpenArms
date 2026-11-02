@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { link, lstat, mkdir, open, readdir, stat, unlink } from "node:fs/promises"
+import { link, lstat, mkdir, open, readdir, stat, unlink, chmod, readFile, appendFile } from "node:fs/promises"
 import path from "node:path"
 import { bytes, governOutput } from "./output-governor.ts"
 import { createTelemetry } from "./governance-telemetry.ts"
@@ -18,9 +18,22 @@ export function governanceHooks(directory: string, projectRoot = directory) {
       // This is a local owner-controlled project, not a hostile shared filesystem.
       for (const target of [path.join(projectRoot, ".openarms"), folder]) {
         await mkdir(target, { mode: 0o700 }).catch(error => { if (error.code !== "EEXIST") throw error })
-        const info = await lstat(target)
-        if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022)) throw Error("Unsafe project log directory")
+        let info = await lstat(target)
+        if (!info.isDirectory() || info.isSymbolicLink()) throw Error("Unsafe project log directory")
+        if (info.mode & 0o022) {
+          await chmod(target, 0o700).catch(() => {})
+          info = await lstat(target)
+          if (info.mode & 0o022) throw Error("Unsafe project log directory")
+        }
       }
+      // Ensure .openarms/logs is in project .gitignore if .gitignore exists
+      try {
+        const gitignoreFile = path.join(projectRoot, ".gitignore")
+        const currentGitignore = await readFile(gitignoreFile, "utf8").catch(() => null)
+        if (currentGitignore !== null && !currentGitignore.includes(".openarms/logs")) {
+          await appendFile(gitignoreFile, "\n# OpenArms runtime logs\n.openarms/logs/\n.openarms/.handoff-lock\n", "utf8").catch(() => {})
+        }
+      } catch {}
     }
     await mkdir(folder, { recursive: true, mode: 0o700 })
     let file = path.join(folder, `${hash(identity).slice(0, 24)}-${randomUUID()}.${extension}`)
@@ -36,7 +49,7 @@ export function governanceHooks(directory: string, projectRoot = directory) {
       finally { await unlink(file) }
       file = stable
     }
-    // Retain seven days / 200 files / 256 MiB. Never remove this newly flushed log.
+    // Retain seven days / 100 files / 64 MiB. Never remove this newly flushed log.
     try {
       const files = await Promise.all((await readdir(folder)).filter(name => /\.(log|json)$/.test(name)).map(async name => {
         const target = path.join(folder, name), info = await stat(target)
@@ -46,7 +59,7 @@ export function governanceHooks(directory: string, projectRoot = directory) {
       let count = files.length, total = files.reduce((sum, entry) => sum + entry.size, 0)
       for (const entry of files) {
         if (entry.target === file || Date.now() - entry.time < 60000) continue
-        if (Date.now() - entry.time <= 604800000 && count <= 200 && total <= 268435456) continue
+        if (Date.now() - entry.time <= 604800000 && count <= 100 && total <= 67108864) continue
         await unlink(entry.target); count--; total -= entry.size
       }
     } catch { /* Retention is best effort; flushed data is still available. */ }

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { readFile, mkdir, lstat, realpath, open, rename, rm } from "node:fs/promises"
 import path from "node:path"
 import { defaultBudgetPolicy, mergeBudgetPolicy } from "./budget-policy.ts"
@@ -8,6 +8,32 @@ import { evaluateBudget, executeBudget, ShadowStore } from "./budget-executor.ts
 import { evaluateRotation, type RotationSnapshot } from "./session-rotation.ts"
 
 export const usageProjectID = (project: string) => createHash("sha256").update(project).digest("hex")
+
+type ContextModel = { provider?: string; model?: string; limit?: number }
+const finiteTokens = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0
+export const contextBand = (value: number | null) => value === null ? -1 : value < .25 ? 0 : value < .5 ? 1 : value < .75 ? 2 : value < .9 ? 3 : 4
+/** Host input is fresh input; cache read/write are disjoint input categories.
+ * Reasoning is already included in host output and must not be counted twice. */
+export function contextSnapshot(records: UsageRecord[], project: string, session: string, active?: ContextModel) {
+  const messages = records.filter(r => r.project === project && r.session === session && r.kind === "message")
+  const latest = messages.filter(r => (!active?.model || r.model === active.model) && (!active?.provider || r.provider === active.provider))
+    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp) || b.id.localeCompare(a.id))[0]
+  const limit = finiteTokens(active?.limit) && active.limit > 0 ? active.limit : 128000
+  const metrics = latest?.metrics
+  const parts = [metrics?.freshInput, metrics?.output, metrics?.cacheRead, metrics?.cacheWrite]
+  const total = parts.every(finiteTokens) ? parts.reduce((a, b) => a + b, 0) : null
+  const tokens = total !== null && Number.isFinite(total) ? total : null
+  const costs = messages.map(r => r.metrics.costUSD)
+  const costUSD = costs.length && costs.every(finiteTokens) && Number.isFinite(costs.reduce((a, b) => a + b, 0)) ? costs.reduce((a, b) => a + b, 0) : null
+  return { tokens, limit, utilization: tokens === null ? null : Math.max(0, Math.min(1, tokens / limit)), metrics, costUSD,
+    model: active?.model ?? latest?.model, provider: active?.provider ?? latest?.provider, fallback: !(finiteTokens(active?.limit) && active.limit > 0) }
+}
+export type ContextSnapshot = ReturnType<typeof contextSnapshot>
+export function contextChanged(previous: ContextSnapshot, next: ContextSnapshot) {
+  return previous.model !== next.model || previous.provider !== next.provider || previous.limit !== next.limit ||
+    contextBand(previous.utilization) !== contextBand(next.utilization) ||
+    (previous.utilization !== null && next.utilization !== null && Math.abs(previous.utilization - next.utilization) > .01)
+}
 
 export type BudgetEditAction = "day-cost" | "session-cost" | "warnings" | "remove-day-cost" | "remove-session-cost"
 export function budgetEditPatch(action: BudgetEditAction, input: string) {
@@ -101,12 +127,36 @@ export async function loadUsagePolicy(directory: string, projectRoot: string, se
 export function createUsageRuntime(directory: string, projectRoot: string) {
   const store = new UsageStore(path.join(directory, "usage")), project = usageProjectID(projectRoot)
   const shadow = new ShadowStore(path.join(directory, "shadow"))
+  const contextFile = (session: string) => path.join(directory, "usage", `context-${usageProjectID(JSON.stringify([project, session]))}.json`)
   const evaluate = async () => {
     try { const policy = await loadUsagePolicy(directory, projectRoot); const state = await store.read(policy); return await executeBudget(policy, evaluateBudget(policy, state.records), shadow) }
     catch { return { action: "allow" as const, audit: "unavailable" as const } }
   }
   return {
     store, project, shadow, evaluate,
+    // Separate server/TUI processes share numeric model metadata only. Atomic
+    // replacement prevents readers observing partial JSON; no prompt is stored.
+    setContextModel: async (session: string, model: any) => {
+      if (!model || typeof model.id !== "string" || typeof model.providerID !== "string") return
+      const file = contextFile(session), temporary = `${file}.${randomUUID()}.tmp`
+      try {
+        await mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
+        const handle = await open(temporary, "wx", 0o600)
+        try { await handle.writeFile(JSON.stringify({ model: model.id, provider: model.providerID, limit: finiteTokens(model.limit?.context) && model.limit.context > 0 ? model.limit.context : 128000, fallback: !(finiteTokens(model.limit?.context) && model.limit.context > 0) })); await handle.sync() } finally { await handle.close() }
+        await rename(temporary, file)
+      } catch { /* Telemetry never blocks a request. */ }
+      finally { await rm(temporary, { force: true }).catch(() => {}) }
+    },
+    context: async (session: string) => {
+      let active: (ContextModel & { fallback?: boolean }) | undefined
+      try {
+        const value = JSON.parse(await readFile(contextFile(session), "utf8"))
+        if (typeof value.model === "string" && typeof value.provider === "string") active = value
+      } catch { /* Missing metadata uses the documented fallback. */ }
+      const records = (await store.read(await loadUsagePolicy(directory, projectRoot))).records
+      const result = contextSnapshot(records, project, session, active)
+      return { ...result, fallback: active?.fallback ?? result.fallback }
+    },
     ...budgetEditor(directory, projectRoot),
     knownModels: async () => [...new Set((await store.read(await loadUsagePolicy(directory, projectRoot))).records.filter(r => r.project === project && r.model).map(r => r.model!))].sort(),
     claimWarnings: async (session: string) => store.claimWarnings(await loadUsagePolicy(directory, projectRoot), project, session),

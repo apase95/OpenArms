@@ -6,6 +6,11 @@ Thư mục này chứa toàn bộ quy chuẩn, chính sách kiểm thử phân t
 
 ## 🧭 Cẩm nang Chọn Tài liệu Kiểm thử
 
+Current skill acceptance uses [project toggles](../guides/skill-management.md):
+default `.openarms/packages`, per-package manifests, ON/OFF/ERROR and automatic
+per-turn injection, with no model-facing load tools. Dated sprint runbooks below
+retain historical API evidence, not current skill setup requirements.
+
 | Bạn muốn làm gì? | Tài liệu cần đọc |
 |---|---|
 | **Decompiler/service/transactional writer Sprint 4.3 (API-only, unregistered)** | [Sprint 4.3](how_to_test/Sprint_43.md) |
@@ -23,6 +28,10 @@ Thư mục này chứa toàn bộ quy chuẩn, chính sách kiểm thử phân t
 
 ## ⚡ Các lệnh Kiểm thử Nhanh thường dùng
 
+Verify/pre-push mặc định chỉ chạy trên host (Node); không cần Docker/Python/PTY.
+Sandbox được giữ làm tài liệu tham khảo. Các smoke commands dưới đây chỉ là
+opt-in tường minh, không phải bước xác minh bình thường hay kết quả đã đạt.
+
 ```bash
 # 1. Xem trước kế hoạch kiểm thử theo file thay đổi
 node scripts/arms-test.mjs verify --plan --file <đường_dẫn_file>
@@ -36,7 +45,7 @@ node scripts/arms-test.mjs related
 # 4. Xác minh hoàn tất trước khi commit (T0 + T1)
 node scripts/arms-test.mjs verify
 
-# 5. Chạy kiểm thử smoke hộp cát Docker (T3)
+# 5. Legacy/reference only: chỉ chạy khi có yêu cầu smoke tường minh (T3)
 npm run test:smoke-static
 npm run test:smoke-runtime
 npm run test:tui-smoke

@@ -1,6 +1,29 @@
 # OpenArms Overview
 
-## Current architecture — single local library (12/10/2026)
+## Current architecture — project skill toggles
+
+The active adapters use `src/local-library.ts` and `src/package-catalog.ts`.
+The default root is `<project>/.openarms/packages`, with a confirmed external
+directory override. Each immediate package directory has a minimal `package.json`
+mapping skill names to relative files. No central registry is needed.
+
+```text
+TUI ON/OFF → project enabled IDs → system.transform every turn
+          → bounded safe file reads → automatic instruction injection
+```
+
+Every skill is independently ON/OFF, including former core/reference content.
+Packages provide bulk toggles only. ON/OFF/ERROR replace Selected/Loaded; the
+server exposes no model-facing skill-loading tool. OFF affects future turns,
+not old conversation content. Host/OS permissions remain independent. Audited
+installation publishes manifests atomically; legacy registry output is retained
+only for compatibility. Rotation snapshots enabled project IDs and acknowledges
+safe target injection, not a model claim. See the [canonical guide](../guides/skill-management.md).
+
+## Archived single-library design (12/10/2026)
+
+The following dated design and sprint sections preserve historical context.
+Their load-tool, unset-root and Selected/Loaded contracts are superseded above.
 
 Each canonical project starts with an **unset** library root. The user explicitly
 chooses one absolute folder containing `registry.json` and `skills/` in `/skills`

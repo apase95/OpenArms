@@ -27,6 +27,41 @@ export function registerLocalSubmit(api: any, prompt: any, eligible: () => boole
 /** Host command callbacks receive a command context, never a session ID. */
 export const sessionAction = (current: () => string, open: (sessionID: string) => void) => () => open(current())
 
+export function registerContextKey(api: any, eligible: () => boolean, open: () => void) {
+  const match = api.keymap.createKeyMatcher("ctrl+space")
+  return api.keymap.intercept("key", (context: any) => {
+    if (!eligible() || api.ui.dialog.open || api.mode.current() !== "base" || !match(context.event)) return
+    context.consume()
+    open()
+  }, { priority: 1001 })
+}
+
+/** Supported SDK v2 transport, shared by the real TUI and isolated fake-host
+ * tests. Never mutates a prompt ref, copies messages or retries an SDK request. */
+export function createHandoffTransport(api: any, signal: AbortSignal, targetReady: (target: string) => boolean) {
+  const options = () => ({ signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]) })
+  return {
+    create: async () => {
+      const result = await api.client.session.create({ title: 'OpenArms reviewed handoff' }, options())
+      if (result.error || typeof result.data?.id !== 'string' || !result.data.id || result.data.parentID) throw Error('SESSION_CREATE_FAILED')
+      return result.data.id as string
+    },
+    blank: async (target: string) => {
+      const result = await api.client.session.messages({ sessionID: target }, options())
+      return !result.error && Array.isArray(result.data) && result.data.length === 0
+    },
+    navigate: async (target: string) => {
+      api.route.navigate('session', { sessionID: target })
+      for (let n = 0; n < 40 && !targetReady(target) && !signal.aborted; n++) await new Promise(resolve => setTimeout(resolve, 25))
+      if (signal.aborted || !targetReady(target)) throw Error('NAVIGATION_FAILED')
+    },
+    submit: async (target: string, text: string) => {
+      const result = await api.client.session.prompt({ sessionID: target, parts: [{ type: 'text', text }] }, options())
+      if (result.error || result.data?.info?.error || result.data?.info?.sessionID !== target || result.data?.info?.role !== 'assistant') throw Error('SUBMIT_AMBIGUOUS')
+    },
+  }
+}
+
 /** Public Prompt has no change callback. Read its supported current ref at 75ms;
  * never submit/reset on typing or cancellation, and rearm only after input changes. */
 export function watchUsagePrompt(current: () => any, eligible: () => boolean, open: () => void,

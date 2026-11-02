@@ -113,18 +113,20 @@ test("CLI cleanup failure preserves the smoke error and third retry blocks befor
   assert.equal(forced.status, 7)
   assert.equal(readFileSync(starts, "utf8"), "start\nstart\nstart\n")
 })
-test("every integration rule adds static exactly once and server/core does not add TUI", () => {
-  const selected = (files) => createPlan(files, parseArgs([])).decisions.filter((entry) => ["required", "recommended"].includes(entry.status)).map((entry) => entry.mode)
+test("integration rules never schedule legacy smoke implicitly; explicit modes retain prerequisites", () => {
+  const selected = (files, args = []) => createPlan(files, parseArgs(args)).decisions.filter((entry) => ["required", "recommended"].includes(entry.status)).map((entry) => entry.mode)
   for (const file of ["plugins/skill-router-server.ts", "src/runtime.ts", "src/package-loader.ts", "sandbox/config/opencode.json", "sandbox/smoke-runtime.mjs"]) {
     const modes = selected([file])
-    assert.ok(modes.includes("smoke-runtime"), file)
-    assert.equal(modes.filter((mode) => mode === "smoke-static").length, 1)
+    assert.ok(!modes.includes("smoke-runtime"), file)
+    assert.equal(modes.filter((mode) => mode === "smoke-static").length, 0)
     assert.ok(!modes.includes("tui-smoke"), file)
+    assert.deepEqual(selected([file], ['smoke-runtime']), ['smoke-static', 'smoke-runtime'])
   }
   for (const file of ["plugins/skill-router-tui.tsx", "plugins/tui-core.ts", "src/skills-service.ts", "sandbox/config/tui.json", "sandbox/tui-smoke.py"]) {
     const modes = selected([file])
-    assert.ok(modes.includes("tui-smoke"), file)
+    assert.ok(!modes.includes("tui-smoke"), file)
     assert.ok(!modes.includes("smoke-runtime"), file)
+    assert.deepEqual(selected([file], ['tui-smoke']), ['smoke-static', 'tui-smoke'])
   }
   for (const file of ["src/commands.ts", "src/state-store.ts", "registry.json", "docs/testing.md", "skills/fixture.txt"]) assert.ok(!selected([file]).includes("tui-smoke"))
   for (const file of ["sandbox/new-adapter.mjs", "plugins/new-plugin.ts"]) assert.ok(createPlan([file], parseArgs([])).decisions.every((entry) => entry.status === "blocked"))

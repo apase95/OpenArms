@@ -1,4 +1,4 @@
-import { mkdir, readFile, open, rename, rm } from "node:fs/promises"
+import { mkdir, readFile, open, rename, rm, stat } from "node:fs/promises"
 import { randomUUID, createHash } from "node:crypto"
 import path from "node:path"
 import { budgetMetrics, validateBudgetPolicy, type BudgetPolicy } from "./budget-policy.ts"
@@ -107,6 +107,13 @@ function crossings(records: UsageRecord[], policy: BudgetPolicy, previous: Warni
  * operator recovery after confirming no writer is alive. Local filesystem only. */
 export class UsageStore {
   readonly directory: string
+  private cache: {
+    mtimeMs: number
+    size: number
+    source: { raw: string; records: UsageRecord[]; warnings: Warning[] }
+    readCache?: { policyVersion: string; timezone: string; aggMtimeMs?: number; aggSize?: number; aggregate: any }
+  } | null = null
+
   constructor(directory: string) { this.directory = directory }
   private async locked<T>(fn: () => Promise<T>): Promise<T> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
@@ -120,8 +127,18 @@ export class UsageStore {
     try { return await fn() } finally { await rm(lock, { recursive: true }) }
   }
   private async source() {
+    const file = path.join(this.directory, "source.jsonl")
+    let s: { mtimeMs: number; size: number } | undefined
+    try { s = await stat(file) }
+    catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return { raw: "", records: [] as UsageRecord[], warnings: [] as Warning[] }
+      throw e
+    }
+    if (this.cache && s && this.cache.mtimeMs === s.mtimeMs && this.cache.size === s.size) {
+      return this.cache.source
+    }
     let raw: string
-    try { raw = await readFile(path.join(this.directory, "source.jsonl"), "utf8") }
+    try { raw = await readFile(file, "utf8") }
     catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return { raw: "", records: [] as UsageRecord[], warnings: [] as Warning[] }; throw e }
     const records: UsageRecord[] = [], warnings: Warning[] = []
     try {
@@ -134,7 +151,9 @@ export class UsageStore {
           warnings.push(w)
         }
       }
-      return { raw, records: latestUsage(records), warnings }
+      const parsed = { raw, records: latestUsage(records), warnings }
+      if (s) this.cache = { mtimeMs: s.mtimeMs, size: s.size, source: parsed }
+      return parsed
     } catch { return invalid() }
   }
   private async atomic(name: string, data: string) {
@@ -156,17 +175,43 @@ export class UsageStore {
       const warnings = crossings(records, policy, old.warnings)
       await this.atomic("source.jsonl", old.raw + JSON.stringify({ schemaVersion: 1, record: incoming, warnings }) + "\n")
       await this.atomic("aggregate.json", JSON.stringify(rebuildUsage(records, policy)))
+      this.cache = null
     })
   }
   async read(policy: BudgetPolicy) {
     validateBudgetPolicy(policy)
     const source = await this.source()
+    const aggFile = path.join(this.directory, "aggregate.json")
+    let aggStat: { mtimeMs: number; size: number } | undefined
+    try { aggStat = await stat(aggFile) }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") invalid() }
+
+    if (this.cache?.readCache &&
+        this.cache.readCache.policyVersion === policy.version &&
+        this.cache.readCache.timezone === policy.timezone &&
+        this.cache.readCache.aggMtimeMs === aggStat?.mtimeMs &&
+        this.cache.readCache.aggSize === aggStat?.size) {
+      return { records: source.records, warnings: source.warnings, aggregate: this.cache.readCache.aggregate }
+    }
+
     try {
-      const cache = JSON.parse(await readFile(path.join(this.directory, "aggregate.json"), "utf8"))
-      if (cache.schemaVersion !== 1 || typeof cache.timezone !== "string" || !Array.isArray(cache.rows)) invalid()
+      if (aggStat) {
+        const cache = JSON.parse(await readFile(aggFile, "utf8"))
+        if (cache.schemaVersion !== 1 || typeof cache.timezone !== "string" || !Array.isArray(cache.rows)) invalid()
+      }
     } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") invalid() }
-    // Derived cache is not authoritative: rebuild also repairs interrupted cache writes.
-    return { records: source.records, warnings: source.warnings, aggregate: rebuildUsage(source.records, policy) }
+
+    const aggregate = rebuildUsage(source.records, policy)
+    if (this.cache) {
+      this.cache.readCache = {
+        policyVersion: policy.version,
+        timezone: policy.timezone,
+        aggMtimeMs: aggStat?.mtimeMs,
+        aggSize: aggStat?.size,
+        aggregate
+      }
+    }
+    return { records: source.records, warnings: source.warnings, aggregate }
   }
   /** At-most-once local delivery: persist claims before toast. A crash after claim
    * may lose the toast, but cannot replay it on restart. Dashboard remains available. */

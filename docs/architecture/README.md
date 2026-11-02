@@ -17,5 +17,5 @@ Thư mục này chứa các tài liệu kiến trúc chính thức mô tả nguy
 
 1. **Ranh giới Host rõ ràng:** OpenArms chỉ quản lý danh mục skill, trạng thái nạp và quản trị ngân sách/output. Toàn bộ quyền thao tác file, lệnh shell và thực thi mô hình LLM thuộc về **OpenCode Host**.
 2. **Single Local Library:** Mỗi dự án tự chọn duy nhất 1 thư mục thư viện skill (`library root`). Không tự động quét ngoài thư mục hoặc merge từ nhiều nguồn không rõ ràng.
-3. **An toàn dữ liệu (Safe Paths & Containment):** Nạp skill chỉ thông qua `load_skill({skill})` với định danh chính xác, không dùng đường dẫn động để chống tấn công Path Traversal.
+3. **An toàn dữ liệu (Safe Paths & Containment):** Per-package manifests define exact IDs; the server automatically injects ON skills through safe bounded reads each turn. No model-facing load tool exists. See [format/migration](../guides/skill-management.md).
 4. **Ghi đĩa Nguyên tử (Atomic Operations):** Mọi cấu hình project trong `.openarms/` đều được bảo vệ bởi writer lock và ghi nguyên tử qua file tạm.

@@ -18,12 +18,12 @@ test('Sprint43 API-only model and writer boundaries never schedule host smoke', 
   for (const file of ['tests/skill-decompiler-service.test.ts', 'tests/skill-decompiler-writer.test.ts', 'tests/skill-model-adapter.test.ts']) assert.ok(result.related.includes(file))
 })
 
-test('Sprint42 scanner/review mappings are explicit; actual frontend still requires PTY', () => {
+test('Sprint42 scanner/review mappings are explicit; frontend defaults to host tests', () => {
   const files = ['src/skill-security-audit.ts', 'src/skill-audit-review.ts']
   assert.deepEqual(plan(files).related, ['tests/skill-security-audit.test.ts', 'tests/sprint42.test.ts'])
   assert.deepEqual(scheduled(plan(files)), ['syntax', 'related'])
   const integration = plan([...files, 'plugins/skill-router-tui.tsx', 'scripts/synthetic-context.mjs'])
-  assert.deepEqual(scheduled(integration), ['syntax', 'full', 'smoke-static', 'smoke-runtime', 'tui-smoke'])
+  assert.deepEqual(scheduled(integration), ['syntax', 'full'])
 })
 
 test("Sprint41 ingestion mapping is isolated and never schedules host smoke", () => {
@@ -37,7 +37,7 @@ test("Sprint41 ingestion mapping is isolated and never schedules host smoke", ()
 test("pre-push runs full once and preserves selective integration and unknown blocking", () => {
   assert.deepEqual(scheduled(plan(["docs/example.md"], ["--pre-push"])), ["full"])
   assert.deepEqual(scheduled(plan(["plugins/server-core.ts"], ["--pre-push"])), ["syntax", "full"])
-  assert.deepEqual(scheduled(plan(["plugins/skill-router-server.ts"], ["--pre-push"])), ["syntax", "full", "smoke-static", "smoke-runtime"])
+  assert.deepEqual(scheduled(plan(["plugins/skill-router-server.ts"], ["--pre-push"])), ["syntax", "full"])
   assert.ok(plan(["unknown.mjs"], ["--pre-push"]).decisions.every((r) => r.status === "blocked"))
   assert.throws(() => parseArgs(["full", "--pre-push"]))
 })
@@ -62,11 +62,11 @@ test("docs, registry, server, TUI, sandbox and unknown decisions are explicit", 
   assert.ok(plan(["graphify-out/new.mjs"]).decisions.every((decision) => decision.status === "blocked"))
   assert.deepEqual(scheduled(plan(["registry.json"])), ["syntax", "full"])
   assert.deepEqual(scheduled(plan(["plugins/server-core.ts"])), ["syntax", "related"])
-  assert.deepEqual(scheduled(plan(["plugins/skill-router-server.ts"])), ["syntax", "related", "smoke-static", "smoke-runtime"])
-  assert.deepEqual(scheduled(plan(["plugins/skill-router-tui.tsx"])), ["syntax", "related", "smoke-static", "tui-smoke"])
-  assert.deepEqual(scheduled(plan(["sandbox/compose.yaml"])), ["syntax", "related", "smoke-static", "smoke-runtime", "tui-smoke"])
+  assert.deepEqual(scheduled(plan(["plugins/skill-router-server.ts"])), ["syntax", "related"])
+  assert.deepEqual(scheduled(plan(["plugins/skill-router-tui.tsx"])), ["syntax", "related"])
+  assert.deepEqual(scheduled(plan(["sandbox/compose.yaml"])), ["syntax", "related"])
   assert.deepEqual(scheduled(plan(["src/commands.ts"])), ["syntax", "full"])
-  assert.deepEqual(scheduled(plan(["src/runtime.ts"])), ["syntax", "full", "smoke-static", "smoke-runtime"])
+  assert.deepEqual(scheduled(plan(["src/runtime.ts"])), ["syntax", "full"])
   assert.ok(plan(["src/new.ts"]).decisions.every((decision) => decision.status === "blocked"))
   assert.ok(plan(["sandbox/new.mjs"]).decisions.every((decision) => decision.status === "blocked"))
   assert.equal(plan(["src/new.ts"], ["related"]).decisions.find((decision) => decision.mode === "related").status, "blocked")
@@ -112,11 +112,12 @@ test("explicit paths precede Git; Git detects staged, unstaged, untracked and de
     assert.deepEqual(changedFiles(parseArgs(["--file", "./src/new.ts", "--file", "src/new.ts"]), directory), ["src/new.ts"])
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
-test("dry-run output is deterministic and verify schedules each smoke once", () => {
+test("dry-run output is deterministic and legacy smoke is explicitly skipped", () => {
   const result = plan(["src/runtime.ts", "sandbox/compose.yaml", "plugins/skill-router-tui.tsx"])
   assert.equal(formatPlan(result), formatPlan(plan(["src/runtime.ts", "sandbox/compose.yaml", "plugins/skill-router-tui.tsx"])))
-  assert.equal(scheduled(result).filter((mode) => mode === "smoke-runtime").length, 1)
-  assert.equal(scheduled(result).filter((mode) => mode === "tui-smoke").length, 1)
+  assert.equal(scheduled(result).filter((mode) => mode === "smoke-runtime").length, 0)
+  assert.equal(scheduled(result).filter((mode) => mode === "tui-smoke").length, 0)
+  assert.match(formatPlan(result), /LEGACY_SMOKE_EXPLICIT_ONLY/)
   assert.match(formatPlan(result), /COVERED_BY_FULL/)
   assert.match(formatPlan(result), /pass-only-sha256/)
 })

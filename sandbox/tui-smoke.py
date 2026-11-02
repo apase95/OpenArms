@@ -60,11 +60,11 @@ local_cases = [
     ("/skills packages", "Skill Packages", ""),
     ("/skills status", "Skill Status", ""),
     ("/skills list docs", "Docs Skills", ""),
-    ("/skills use docs docs-editor", "Skills Enabled", "Selection updated"),
-    ("/skills status", "Skill Status", "Selected"),
+    ("/skills use docs docs/docs-editor", "Skills Enabled", "Project skill toggles updated"),
+    ("/skills status", "Skill Status", "ON"),
     ("/arms-test-load", "Synthetic loaded", ""),
-    ("/skills status", "Skill Status", "Loaded"),
-    ("/skills inspect", "Skill Inspect", "Loaded"),
+    ("/skills status", "Skill Status", "ON"),
+    ("/skills inspect", "Skill Inspect", "ON"),
     ("/skills invalid", "Skill Router Error", ""),
     ("/usage today", "Usage and Budget", "Today"),
     ("/usage invalid", "Usage and Budget", "Usage:"),
@@ -256,7 +256,7 @@ try:
         # fixed 120-column
         # viewport. Ignore background chrome outside the dialog when matching
         # wrapped copy; it can remain visible beside differential frames.
-        dialog_visible = dialog_crop(screen, backgrounds, 'Change library path?')
+        dialog_visible = dialog_crop(screen, backgrounds, 'Change package directory?')
         limit = startup_timeout if typed_at is None else interaction_timeout
         if now - stage_started > limit:
             raise TimeoutError(f"TIMEOUT: tui-{'startup' if typed_at is None else 'interaction:' + phase} limit={limit}s")
@@ -264,18 +264,18 @@ try:
             os.write(master, keys.pop(0))
             next_key_at = now + 0.3
         if phase == "open" and "Select Action" in visible:
-            # Ten local actions plus Done; wrap to status using the real picker.
+            # Status is initially selected; Enter avoids menu-count-dependent
+            # wrapping through potentially destructive actions.
             output.clear()
-            # Keep the pointer over a row while the viewport moves underneath it.
             assert "Grant" not in visible and "Revoke" not in visible
-            keys = [b"\x1b[B"] * 12 + [b"\r"]
+            keys = [b"\r"]
             next_key_at = now + 1
             phase = "status"
             stage_started = now
             print("\nSTAGE: tui-interaction:status", flush=True)
         elif phase == "status" and "Skill Status" in visible:
-            assert "Not configured" in visible
-            assert visible.index("Set / edit library path") < visible.index("Not configured")
+            assert ".openarms/packages" in visible
+            assert "No skills available" in visible
             output.clear()
             keys = [b"e"]
             next_key_at = now + 1
@@ -283,26 +283,26 @@ try:
             stage_started = now
             print("\nSTAGE: tui-interaction:reopen", flush=True)
         elif phase == "configure" and not keys and "Set library path" in visible:
-            measure('Set library path', ['Absolute library root'])
-            keys = [b"/tmp/openarms-pty-library", b"\r"]
+            measure('Set library path', ['/workspace/project/.openarms/packages'])
+            keys = [b"\x15", b"/tmp/openarms-pty-library", b"\r"]
             next_key_at = now + 1
             phase = "configure-confirm"
             stage_started = now
-        elif phase == "configure-confirm" and not keys and "Change library path?" in visible:
-            measure('Change library path?', ['Cancel', 'Confirm'], True)
+        elif phase == "configure-confirm" and not keys and "Change package directory?" in visible:
+            measure('Change package directory?', ['Cancel', 'Confirm'], True)
             assert "choose" not in dialog_visible and "Default:" not in dialog_visible
             keys = [b"\r"]  # Default Cancel must preserve Not configured.
             next_key_at = now + 1
             phase = "configure-denied"
             stage_started = now
-        elif phase == "configure-denied" and not keys and "Skill Status" in visible and "Not configured" in visible:
+        elif phase == "configure-denied" and not keys and "Skill Status" in visible and ".openarms/packages" in visible:
             resize(80)
-            keys = [b"e", b"/tmp/openarms-pty-library", b"\r"]
+            keys = [b"e", b"\x15", b"/tmp/openarms-pty-library", b"\r"]
             next_key_at = now + 1
             phase = "configure-reconfirm"
             stage_started = now
-        elif phase == "configure-reconfirm" and not keys and "Change library path?" in visible:
-            cancel_span = measure('Change library path?', ['Cancel', 'Confirm'], True)
+        elif phase == "configure-reconfirm" and not keys and "Change package directory?" in visible:
+            cancel_span = measure('Change package directory?', ['Cancel', 'Confirm'], True)
             keys = [b"\x1b[B"]
             next_key_at = now + 1
             phase = "configure-active"
@@ -310,8 +310,8 @@ try:
         elif phase == "configure-active" and not keys and button_span("Confirm") == cancel_span:
             assert 0 < cancel_span[1] - cancel_span[0] < 120
             assert "Container paths" not in dialog_visible
-            assert "task locks" in dialog_visible and "/new" in dialog_visible
-            measure('Change library path?', ['Confirm'])
+            assert "OFF" in dialog_visible and "earlier conversation" in dialog_visible
+            measure('Change package directory?', ['Confirm'])
             keys = [b"\r"]
             next_key_at = now + 1
             phase = "configured"
@@ -339,10 +339,10 @@ try:
                 continue  # Footer arrives after the title/skill rows in differential frames.
             if title in visible and (not detail or detail in visible):
                 if command == "/skills status":
-                    if detail in ("Selected", "Loaded"):
+                    if detail == "ON":
                         assert visible.index("docs-editor") < visible.index("Set / edit library path")
                     else:
-                        assert visible.index("Set / edit library path") < visible.index("No skills selected")
+                        assert "OFF" in visible
                 if command in ("/usage", "/usage today", "/budget"):
                     assert not any(debug in visible for debug in ("missing=0", "estimated=false", "__skill_router_home__", '"session":{'))
                     assert re.search(r"Timezone\s+:\s+UTC", visible), "readable aligned metadata missing"
@@ -359,7 +359,7 @@ try:
                     continue
                 # Invalid skills arguments produce a toast, not a dialog. Clear
                 # the prompt via the supported ctrl+u binding before the next case.
-                keys = ([b"\x1b"] if command not in ("/skills invalid", "/skills use docs docs-editor", "/arms-test-load") else []) + [b"\x15", local_cases[local_index][0].encode(), b"\r"]
+                keys = ([b"\x1b"] if command not in ("/skills invalid", "/skills use docs docs/docs-editor", "/arms-test-load") else []) + [b"\x15", local_cases[local_index][0].encode(), b"\r"]
                 next_key_at = now + 1
                 stage_started = now
                 print("\nSTAGE: tui-local:" + local_cases[local_index][0], flush=True)
@@ -392,14 +392,14 @@ try:
             phase = "inherited"
             stage_started = now
             print("\nSTAGE: tui-selection:automatic", flush=True)
-        elif phase == "inherited" and not keys and "Skill Status" in visible and "docs-editor" in visible and "Selected" in visible:
+        elif phase == "inherited" and not keys and "Skill Status" in visible and "docs-editor" in visible and "ON" in visible:
             assert "Loaded" not in visible
             print("\nPASS: same-library roots automatically copy selection, not load history", flush=True)
             keys = [b"\x1b", b"/new", b"\r", b"/skills status", b"\r"]
             next_key_at = now + 1
             phase = "home-preview"
             stage_started = now
-        elif phase == "home-preview" and not keys and "Skill Status" in visible and "docs-editor" in visible and "Selected" in visible:
+        elif phase == "home-preview" and not keys and "Skill Status" in visible and "docs-editor" in visible and "ON" in visible:
             assert "Loaded" not in visible
             print("\nPASS: actual /new Home immediately previews Selected before ordinary prompt", flush=True)
             keys = [b"e"]
@@ -411,7 +411,7 @@ try:
             next_key_at = now + 1
             phase = "switch-cancel"
             stage_started = now
-        elif phase == "switch-cancel" and not keys and "Change library path?" in visible:
+        elif phase == "switch-cancel" and not keys and "Change package directory?" in visible:
             keys = [b"\x1b", b"e"]
             next_key_at = now + 1
             phase = "switch-reedit"
@@ -422,14 +422,14 @@ try:
             next_key_at = now + 1
             phase = "switch-confirm"
             stage_started = now
-        elif phase == "switch-confirm" and not keys and "Change library path?" in visible:
-            assert "task locks" in dialog_visible and "/new" in dialog_visible
+        elif phase == "switch-confirm" and not keys and "Change package directory?" in visible:
+            assert "OFF" in dialog_visible and "earlier conversation" in dialog_visible
             keys = [b"\x1b[B", b"\r"]
             next_key_at = now + 1
             phase = "switched"
             stage_started = now
         elif phase == "switched" and not keys and "Skill Status" in visible and "/tmp/openarms-pty-other" in visible:
-            assert "docs-editor" not in visible
+            assert "OFF" in visible and "ON" not in visible
             keys = [b"\x1b", b"/arms-test-audit-medium", b"\r"]
             next_key_at = now + 1
             phase = "audit-dialog"

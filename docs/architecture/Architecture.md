@@ -1,5 +1,86 @@
 # OpenArms — Bản đồ kiến trúc và vận hành
 
+## Current skill architecture: project toggles
+
+See [skill management](../guides/skill-management.md) for the current format and
+migration. `package-catalog.ts` discovers per-package manifests under the default
+`.openarms/packages` or one explicit external root. `local-library.ts` persists
+project enabled IDs and safely assembles them for every server system transform.
+All skills are ON/OFF/ERROR; package bulk toggles add no authorization layer.
+There are no model-facing skill loaders or skill-selection locks/grants in this
+active route. Independent runtime governance and host/OS permissions remain.
+
+Rotation captures the same project enabled-ID snapshot, revision-checks restore
+and submission, and acknowledges only safe target injection. It does not ask the
+model to load a skill. OFF stops future injection, not prior conversation context.
+
+**Historical skill-contract notice:** dated diagrams and Sprint 2.x/5.3 skill
+selection/load descriptions below record earlier designs. References to Selected,
+Loaded, core/optional, central registries, grants or load tools are not current
+skill configuration instructions. Unrelated usage/governance descriptions retain
+their own documented status; this migration does not enable threshold rotation.
+
+## Sprint 5.3: explicit reviewed handoff (not automatic threshold rotation)
+
+The Context meter's **Handoff (h)** action now reviews an operator-prepared,
+source-bound `HandoffStore` draft. The user must review the complete sanitized
+seven-section body and Selected IDs, then affirm **Create and send once**.
+No dialog, idle event or model-generated summary is completion authority for 5.2;
+the automatic threshold detector remains disabled. Preparation is still the
+documented operator `session-lifecycle prepare` command, not a history scraper.
+
+Operational contract: the confirming user must explicitly attest exclusive,
+single-controller ownership of source and target until submission completes.
+Concurrent clients/agents/automation are unsupported. Fresh SDK histories and
+idle statuses are checked immediately before submit, but no host atomic
+reservation or cross-client race prevention is claimed. Local submission gating
+compares source selection and the exact restored target snapshot, rejecting
+grants, locks, history or selection mutations. Restore accepts only an untouched
+target or known automatic initialization, never explicit selection/authority.
+Rotation records cannot use legacy claim/acknowledge to bypass real activation;
+archive requires the activation-bound acknowledged state.
+
+`AutoSessionRotator` republishes the hash-checked journal body to the private,
+atomic `progress.md` projection before any SDK effect. A durable `rotation.phase`
+records `creating → created → restored → navigated → submitting → submitted`.
+The `creating` intent serializes competing confirmations before session creation;
+`submitting` precedes the single prompt request. These are attempt stages, not
+claims that an ambiguous request failed or succeeded. The existing lifecycle
+remains `prepared → claimed → acknowledged → archived`; target linkage is stored
+when creation returns. Audit metadata contains IDs, selection revision and phase,
+not SDK exception bodies or the startup prompt. The existing journal intentionally
+retains reviewed progress as private task data, not as audit text.
+
+The TUI uses supported `client.session.create`, `route.navigate('session', …)`
+and `client.session.prompt` calls. It requires idle source, no running/pending
+tools, no permission/question, empty non-shell focused prompt and no conflicting
+dialog. Message/part state, exact selection and UI ownership are rechecked around
+async effects. New keys abort the confirmed operation without resetting input;
+dispose aborts it too. Navigation waits at most one second for the target ref;
+unknown status/host shapes fail closed. No source session is deleted. These are
+checks over public host state, not an atomic host-wide transaction or a 5.2 task
+completion detector. Host-injected project/system context is not blanked.
+
+`local-library.handoffSelection/restoreHandoffSelection` capture the exact source,
+not `project.lastSelection`, and restore it in a revision-checked state-store
+transaction. Only package/optional selection transfers; loaded history, verified
+grants, mismatch approvals and task locks do not. Existing source state is retained.
+The prompt treats reviewed progress as data, names Next Step, and instructs loading
+only necessary Selected IDs through `load_skill`; selection grants no permissions.
+Only a successful real target **core** `load_skill` execution can automatically
+acknowledge, bound to captured handoff ID/hash/target/revision and a selected ID.
+Text claiming success, failed/wrong-target/unselected loads and topic-only reads
+do not count. No selection explicitly means no activation acknowledgement.
+
+Any uncertain create/submit, failed write, stale confirmation, cancellation or
+navigation error stops without retry, reassignment or deletion. After restart,
+an existing attempt cannot be re-confirmed. Inspect journal and target history;
+`recover` repairs the projection only and never restarts SDK requests. Abandoned
+locks require stopped writers and owner-reviewed backup/recovery, not time-based
+stealing. See [Sprint 5.3 testing/recovery](../testing/how_to_test/Sprint_53.md).
+Real first-turn model behavior and new TUI interaction still require host acceptance;
+offline fake-SDK plus real state-store/server tests are not that proof.
+
 > **Ý chính:** OpenArms là plugin độc lập chạy bên trong OpenCode. Nó quản lý
 > cách skill đi vào context và đang phát triển thêm khả năng giảm output, đo usage
 > và hỗ trợ vòng đời session. OpenCode vẫn là host thực thi agent, tool và permission.
@@ -275,6 +356,30 @@ sequenceDiagram
 Task lock giữ **một package trong một task**; vẫn có thể nạp workflow cùng package.
 Trong implementation hiện tại, prompt mới qua `chat.message` reset lock: chưa
 phải một task-completed detector độc lập.
+
+Sprint 5.2 fail-closed foundation: `ProgressiveRotation` accepts caller-sourced
+`HandoffFields`, accepts at most eight facts per section and rejects malformed or
+over-4096-character facts with an omission marker before regex sanitization (never
+prefix truncation). Valid caller provenance is retained; omission markers are
+runtime-generated. It retains only one
+session/model/turn in RAM. It never writes a draft to disk or changes selection
+or task locks. Threshold constructor defaults are `.5/.75/1` (strictly increasing);
+utilization > `.9` also requests a critical warning. This early warning is not
+the configured saturation threshold. Unknown telemetry suppresses presentation.
+`TaskCompletionAttestation` is a trusted-caller contract, not authentication:
+callers must independently prove primary task completion, final stop, no pending
+tools and current turn/revision. Idle and finished-tool events are insufficient.
+No production host adapter is registered because atomic authority is unavailable.
+Presenter ports support 8-second suggestion expiry, dismissal and explicit
+handoff preparation; concrete UI adapters must implement focus ownership,
+Enter/Esc, risks text and actionable companion UI (toast callbacks unsupported).
+They must invalidate before typing/activity/navigation/model/de-escalation updates.
+These ports are not a shipped modal or Sprint 5.3 auto-resume implementation.
+Invalid identities/revisions clear the validated frame and draft; matching invalid
+attestations cannot enable presentation. Draft freshness is turn-scoped, while
+threshold deduplication lasts across turns for the current session/model. Presenter
+actions and queued expiry callbacks are generation-owned, including synchronous
+dismissal/confirmation during presentation setup; replaced actions are inert.
 
 ### 4.2. State nào thuộc ai?
 
