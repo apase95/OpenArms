@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
+import { tmpdir } from 'node:os'
 import { HandoffStore } from '../src/session-handoff.ts'
 
 async function fixture(run: (store: HandoffStore) => Promise<void>) {
-  const root = await mkdtemp('/tmp/opencode/handoff-snapshot-')
+  const root = await mkdtemp(path.join(tmpdir(), 'handoff-snapshot-'))
   try { await run(new HandoffStore(root)) }
   finally { await rm(root, { recursive: true, force: true }) }
 }
