@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "YOUR_PROVIDER/YOUR_IMPLEMENTER_MODEL",
+  "default_agent": "build",
+  "plugin": ["file:///ABSOLUTE/PATH/TO/OpenArms/plugins/skill-router-server.ts"],
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "prompt": "{file:../../prompts/openarms-controller-prompt.md}"
+    },
+    "explore": {
+      "mode": "subagent",
+      "model": "YOUR_PROVIDER/YOUR_SCOUT_MODEL"
+    },
+    "general": {
+      "mode": "subagent",
+      "model": "YOUR_PROVIDER/YOUR_IMPLEMENTER_MODEL",
+      "prompt": "{file:../../prompts/openarms-implementer-prompt.md}"
+    }
+  }
+}
