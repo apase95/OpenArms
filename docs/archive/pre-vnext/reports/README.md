@@ -9,6 +9,22 @@ Thư mục này lưu trữ các báo cáo nghiên cứu, đánh giá cột mốc
 
 ---
 
+## Bộ nghiên cứu cải tổ OpenArms
+
+Các tài liệu sau là audit tĩnh và đề xuất trên baseline `bdd62e8`, không phải
+release notes hoặc chứng nhận live-host acceptance:
+
+1. [Lỗi/rủi ro cần vá](overview/openarms-remediation-audit.md) — source/installed drift,
+   ưu tiên P0–P2, FIX IDs và checklist nghiệm thu.
+2. [Kiến trúc các harness](overview/agent-harness-architecture-survey.md) — Pi,
+   OpenCode, Claude Code, Aider; sơ đồ diễn giải và nguồn chính thức.
+3. [Tính năng phù hợp OpenArms](overview/openarms-feature-proposals.md) — backlog
+   F-01…09, dependency, privacy và rollout.
+
+Định hướng: OpenCode sở hữu loop; OpenArms quản lý context, workflow,
+observability và recovery qua capability host. Xem [kiến trúc hiện tại/đích](../architecture/Architecture.md).
+Báo cáo/runbook cũ giữ semantics theo revision của nó; không dùng như setup hiện hành.
+
 ## 📑 Danh mục Báo cáo
 
 ### 1. Đánh giá Tổng thể Giai đoạn (Phase Reviews)

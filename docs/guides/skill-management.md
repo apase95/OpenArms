@@ -1,86 +1,63 @@
-# Project skill toggles
+# Skills — browser cho native OpenCode
 
-The active server injects enabled skill instructions on every
-`experimental.chat.system.transform` turn. It does not expose `load_skill` or
-`load_skill_package`. Enabling instructions is not a host/OS permission grant.
+## Contract
 
-## Package format
+Tất cả skill hợp lệ mà OpenCode trả trong catalog đều có thể được xem/request.
+Không ON/OFF, package bulk toggle, grant/approval, selection restore hoặc auto-injection.
+OpenArms không parse frontmatter hay scan filesystem; host là nguồn discovery duy nhất.
 
-Default root: `<canonical-project>/.openarms/packages`. Each package is a direct
-child directory with a minimal `package.json`, for example:
+## Tạo một skill
 
-```text
-.openarms/packages/writing/package.json
-.openarms/packages/writing/edit.md
-.openarms/packages/writing/review.md
+Ví dụ project path `.opencode/skills/writing/SKILL.md`:
+
+```markdown
+---
+name: writing
+description: Improve clarity while preserving the original meaning.
+---
+Use short sentences. Explain important edits.
 ```
+
+Thêm thư viện ngoài bằng cách merge host config, không thay toàn file:
 
 ```json
-{"skills":{"edit":"edit.md","review":"review.md"}}
+{
+  "skills": { "paths": ["/absolute/path/to/your/library"] }
+}
 ```
 
-The resulting IDs are `writing/edit` and `writing/review`. Package and skill
-names use lowercase letters/digits separated by hyphens. Manifest paths are
-relative to the package; traversal, absolute paths and symlinks are rejected.
-No central registry and no core/optional distinction are required. A missing
-default root means an empty catalog; invalid manifests appear as ERROR.
+Host version/config quyết định cách resolve paths, scope và refresh. Không có runtime path
+picker hoặc OpenArms library state nữa. Bundled `skills/` không tự được thêm vào catalog;
+nếu muốn dùng, thêm absolute path của nó vào `skills.paths` và review license/nội dung.
 
-## Controls
+## `/skills`
 
-- `/skills status`, `inspect`, and `list writing`: ON/OFF/ERROR per skill.
-- `/skills use writing`: bulk ON for every skill in that package.
-- `/skills add writing writing/edit`: turn one skill ON (also works when the
-  package was completely OFF).
-- `/skills remove writing writing/edit`: turn any skill OFF.
-- `/skills disable writing`: bulk OFF; `/skills clear`: all project skills OFF.
-- Status → edit directory: confirmed absolute external directory override.
-  Cancel preserves the current configuration. A confirmed source switch resets
-  all skills to OFF. No implicit environment/global fallback or source merging.
+1. Mở browser, gõ để lọc tên/description bằng host UI.
+2. Chọn skill → **Inspect** xem location và body preview.
+3. **Request in draft** refresh catalog và append instruction gọi native `skill` tool.
+4. Review draft, chắc chắn đang normal mode, bổ sung task rồi tự gửi.
 
-Enabled IDs are project-scoped, not independent per-session choices. New skills
-are OFF. The existing private state store persists the canonical project root,
-directory/revision and enabled IDs (`lastSelection`, grouped by package); session
-selection fields are compatibility snapshots for the TUI and handoff flow.
+Request không phải execution acknowledgement. OpenArms không tạo session, không submit,
+không đổi model và không đánh dấu “Loaded”. Existing draft không bị reset; request được
+append có newline. Native skill tool sẽ hỏi/chặn theo host permissions nếu cần.
+Không có bảo đảm atomic single-client targeting của host append endpoint.
 
-OFF stops subsequent injection. It does **not** erase instructions already in
-conversation history, and toggling does not require `/new`. ON means enabled and
-currently readable, not proof the model followed the instructions. ERROR means
-the enabled file or package could not be safely read; no fallback is injected.
-Reads retain regular-file/no-follow, containment, identity/race, bounded UTF-8
-and aggregate output-budget checks. Instructions remain trusted operator input;
-this is not a sandbox or a cryptographic content-approval system.
+## ERROR và troubleshooting
 
-## Migration
+- Response thiếu trường/name không hợp lệ/tên trùng: ERROR, không có Request action.
+- Không có `app.skills` hoặc mất kết nối: báo lỗi; không chuyển sang scanner riêng.
+- Catalog rỗng: kiểm tra native directories/`skills.paths` và refresh/restart host.
+- Skill file lỗi không hiện: xem host diagnostics; host có thể bỏ file trước khi trả catalog.
+- Tên trùng đã bị host override trước response: OpenArms không phát hiện được bản bị che.
+- Gọi skill bị deny: review host permission, đặc biệt rules OpenArms cũ.
 
-Back up the private `$XDG_STATE_HOME/openarms/state.json` (default
-`~/.local/state/openarms/state.json`) before upgrading. Existing library roots
-are retained as explicit overrides, but the first catalog-format refresh resets
-old selection/load/grant/task metadata to OFF; old core IDs are not implicitly
-enabled. Convert each old package into a directory and author its minimal
-manifest, then explicitly enable wanted IDs. The central v1/v2 registry and
-reference/topic layout remain legacy import/export formats, not active runtime
-configuration. List any desired reference document as its own independently
-toggleable manifest entry. Audited `/skills install` now writes a package manifest
-in the same staged transaction as the installed bytes: `<id>/main` and one
-`<id>/reference-<reference-id>` entry per reference. Local installs go to
-`.openarms/packages`; global installs go to `$XDG_CONFIG_HOME/opencode/packages`
-(fallback `~/.config/opencode/packages`). Global use requires an explicit external
-root override; installation never silently switches roots or enables skills.
-The writer retains a v2 registry beside the packages directory as a compatibility
-export for audit tooling. Runtime discovery neither requires nor trusts it.
-The low-level scope API retains its legacy layout unless `catalog: true` is set.
+Không bypass permissions bằng đọc file trực tiếp khi host đã deny.
+Xem [migration](migration.md) trước khi dùng thư viện manifests cũ; arbitrary `.md`
+không tự chuyển thành `SKILL.md` hợp lệ.
 
-## Verification and limitations
+## Nguồn API khảo sát
 
-`tests/skill-toggle.test.ts` is the isolated automatic-injection happy path and
-symlink-escape edge. It uses authored temporary data, not installed skills.
-Manual acceptance: enable one synthetic skill, send a turn, turn it OFF, and
-send another turn in the same session. Verify no model-facing load tool exists,
-and test another session/project, restart, malformed manifest, missing file,
-invalid UTF-8 and output-budget errors. Do not infer context erasure from OFF.
+- [OpenCode native skill implementation v1.19.3](https://github.com/anomalyco/opencode/blob/v1.19.3/packages/opencode/src/skill/index.ts)
+- [Native skill tool v1.19.3](https://github.com/anomalyco/opencode/blob/v1.19.3/packages/opencode/src/tool/skill.ts)
 
-The migrated local-runtime/adapter fixtures, audited install/export bridge and
-rotation acknowledgement pass offline tests. Generated-data Docker runtime and
-PTY checks also pass; these do not prove live-model instruction following or
-comparative token savings. Existing historical sprint results are not evidence
-of this new contract.
+Live TUI/provider acceptance phải được kiểm tra riêng trên host của người dùng.

@@ -1,68 +1,34 @@
 <p align="center">
   <img src="docs/assets/openarms-logo.svg" alt="OpenArms logo" width="560">
 </p>
-<h1 align="center">OpenArms</h1>
-<p align="center">Project skills and runtime controls for OpenCode.</p>
-<p align="center">
-  <a href="#getting-started">Get started</a> ·
-  <a href="docs/guides/skill-management.md">Skill guide</a> ·
-  <a href="docs/guides/local-opencode.md">Optional profiles</a> ·
-  <a href="LICENSE">MIT license</a>
-</p>
 
-## Overview
+# OpenArms
 
-OpenArms is a plugin layer for [OpenCode](https://github.com/anomalyco/opencode),
-not an OpenCode fork or distribution. It lets you turn project skills ON or OFF
-and adds controls for tool output, usage reports, and context tracking.
+**Native skill browser + output compactor cho OpenCode.**
 
-A skill is a local file with instructions. Skills start OFF. When you enable a
-skill, the server adds its instructions to the system prompt on every turn.
-There is no model-facing `load_skill` tool. OpenCode runs your chosen provider
-and model; OpenArms does not bundle one or choose a fallback.
+OpenArms 0.2 thu gọn về hai chức năng. OpenCode sở hữu model, agent loop, native
+skill loading, tools, permissions và conversation. Không còn project skill toggles,
+automatic skill injection, registry/grants, usage/budget, skill installer, handoff,
+rotation hoặc workflow nhiều agent.
 
-## Main features
+## Chức năng
 
-| Feature | What it does |
-| --- | --- |
-| Project skill controls | Manage ON/OFF/ERROR states from `/skills` in the TUI. |
-| Simple local packages | Read package manifests from `.openarms/packages`; no central registry is needed. |
-| Safe, bounded reads | Check file paths and limit how much skill content enters a turn. |
-| Reviewed installation | Ask for review and separate consent before sending source or writing an install. |
-| Output and usage controls | Shorten large tool output and report usage and context information. |
-| Optional workflow prompts | Provide controller, scout, and implementer examples where supported. |
+| Phần | Hành vi |
+|---|---|
+| `/skills` | Lấy catalog từ host, lọc, xem location/content và đưa yêu cầu dùng skill vào draft |
+| Native loading | Model gọi native `skill` tool của OpenCode khi cần; host thực thi permissions |
+| Output compaction | Test/build/linter/git-diff, file inspection và generic fallback |
+| Output artifacts | Lưu bản gốc quan sát được khi output thay đổi; private files và retention tối thiểu |
 
-## Architecture
+Không ON/OFF, không state database riêng. Catalog có thể có dòng ERROR cho metadata
+không hợp lệ/tên trùng mà host trả về. Skill không xuất hiện trong catalog phải được
+chẩn đoán ở host; OpenArms không tự scan/fix/install nó.
 
-OpenCode owns model calls and host permissions. The server and TUI adapters
-share a local runtime for packages and project state.
+## Cài đặt
 
-```mermaid
-flowchart TD
-    TUI[OpenCode TUI controls] -->|commands| TA[TUI adapter]
-    TA -->|manage skills| R[Shared local runtime]
-    H[OpenCode hooks] -->|turn events| SA[Server adapter]
-    SA -->|read enabled skills| R
-    R -->|read| F[Package manifests and skill files]
-    R -->|read and write| S[Project toggle state]
-    R -->|enabled instructions| P[System prompt]
-    P -->|via OpenCode| M[Your provider and model]
-```
-
-```text
-src/                         Shared core and local runtime
-plugins/                     Server and TUI adapters
-prompts/                     Optional workflow instructions
-examples/local-opencode/     Config examples to review and merge
-docs/                        Guides, architecture, and testing
-```
-
-## Getting started
-
-### 1. Install the checkout
-
-You need **Node.js 22 or newer**, Git, and an installed OpenCode.
-Keep the checkout in a stable location.
+Cần OpenCode có TUI plugin API và `app.skills`/`tui.appendPrompt`, Node.js phù hợp
+`engines` trong `package.json` khi chạy development checks. Dependency declarations
+được pin; không có cam kết tương thích mọi phiên bản host.
 
 ```bash
 git clone https://github.com/apase95/OpenArms.git
@@ -70,9 +36,7 @@ cd OpenArms
 npm ci
 ```
 
-### 2. Register both plugins
-
-Manually merge the server entry into your OpenCode `opencode.json`:
+Merge server entry vào `opencode.json` của bạn, giữ nguyên các settings/plugins khác:
 
 ```json
 {
@@ -82,7 +46,7 @@ Manually merge the server entry into your OpenCode `opencode.json`:
 }
 ```
 
-Merge the TUI entry separately into `tui.json` alongside that config:
+Merge TUI entry vào `tui.json` riêng:
 
 ```json
 {
@@ -92,84 +56,77 @@ Merge the TUI entry separately into `tui.json` alongside that config:
 }
 ```
 
-Replace `/absolute/path/to/OpenArms` with your checkout's absolute path.
-Keep existing settings and plugin entries; do not replace your whole config.
-Restart OpenCode, then open `/skills` in your project.
+Hai entry paths được giữ để giảm thay đổi cấu hình khi upgrade. Thay absolute paths
+đúng checkout/runtime đã triển khai. Restart chỉ reload path đó, không tự deploy code.
+Không có script tự ghi đè config, copy credentials hoặc dọn database của OpenCode.
 
-### 3. Add your first skill
+## Thêm skill
 
-In the project where you use OpenCode, create these files under its canonical
-project root (the resolved project directory):
-
-```text
-.openarms/packages/writing/
-├── package.json
-└── edit.md
-```
-
-Put this manifest in `package.json`:
-
-```json
-{"skills":{"edit":"edit.md"}}
-```
-
-Write a small instruction in `edit.md`, for example:
+Dùng cơ chế native OpenCode, ví dụ `.opencode/skills/writing/SKILL.md` trong project:
 
 ```markdown
-# Clear writing
-Use short sentences. Keep the original meaning when editing text.
+---
+name: writing
+description: Edit text for clarity while preserving meaning.
+---
+Use short sentences. Preserve the author's intent.
 ```
 
-In OpenCode, run `/skills list writing`, then `/skills use writing`.
-Check `/skills status` and send a writing task. The skill ID is `writing/edit`.
-Use `/skills disable writing` to turn it OFF for future turns.
+Hoặc merge một thư viện sẵn có qua host config:
 
-Toggles apply to the project, not just one session. OFF does not erase earlier
-conversation content. A confirmed directory change in Status resets skills to
-OFF; no global library is selected automatically. Copying the repository's
-`skills/` folder alone does not register skills.
-See the [skill guide](docs/guides/skill-management.md) for commands and migration.
+```json
+{
+  "skills": { "paths": ["/absolute/path/to/library"] }
+}
+```
+
+Root cần chứa các file `SKILL.md` có frontmatter hợp lệ. Không còn đọc `package.json`
+manifests của `.openarms/packages`. Đường dẫn đó vẫn có thể dùng làm thư viện native
+nếu thêm vào `skills.paths` và có `SKILL.md` đúng format; không tự chuyển đổi file.
+
+## Sử dụng
+
+1. Restart/refresh host sau thay đổi library theo phiên bản OpenCode.
+2. Mở `/skills`, chọn skill rồi **Inspect** hoặc **Request in draft**.
+3. Request được append, không xóa draft và không auto-submit. Kiểm tra normal mode,
+   nội dung và model đang dùng trước khi gửi.
+4. Native `skill` tool xử lý việc nạp; model tuân thủ instruction không được bảo đảm.
+
+Skill tool và custom tools không bị output governor rewrite. OpenArms không inject
+catalog hoặc toàn bộ skill instructions vào system prompt; host quyết định native descriptions.
 
 ## Development
 
-From the repository root, install dependencies and review the task's test plan:
-
 ```bash
-npm ci
-node scripts/arms-test.mjs verify --plan --file README.md --task my-task
-npm test -- --file README.md --task my-task
+npm run test:plan -- --task my-task
+npm run check
+npm test
+npm run test:policy
 ```
 
-Replace `README.md` with your task's full scope. Repeat `--file <path>` for each
-changed, new, or removed file, or use `--base <revision>` for committed changes.
-Explicit files replace Git discovery. `npm run test:plan` previews the plan for
-Git changes. The unified runner selects host checks; docs-only edits skip code
-tests. Unknown paths need a reviewed policy mapping.
+Thin runner: TypeScript/local imports/active doc links + small Node unit suite. Không
+Docker, Python, PTY, smoke cache, test mapping database hay Git hooks. Offline tests
+không chứng minh live TUI/provider acceptance.
 
-See the [testing guide](docs/testing/testing.md) for syntax checks and opt-in
-pre-push verification. Sandbox checks are reference-only and never run by default.
+## Giới hạn và privacy
 
-## Limits and privacy
+- Logs có thể chứa secret; private permissions không phải redaction. Không share logs tùy tiện.
+- Bản gốc là **observed output** tại hook, có thể đã bị host truncate trước đó.
+- Cap 50.000 UTF-8 byte chỉ áp dụng output đi qua governor, không toàn prompt/native skill.
+- Retention best-effort 7 ngày / 100 file / 64 MiB cho output logs mới; recent files được bảo vệ.
+- Không khẳng định mức tiết kiệm token/chi phí hoặc task success khi chưa đo.
+- Phiên bản installed cũ không tự thay đổi. Đọc migration trước khi upgrade.
 
-- Skill instructions are trusted input, not security isolation or OS permissions.
-  ON means readable and enabled, not proof that a model follows the instructions.
-- Usage reports do not enforce a budget. Automatic session rotation and measured
-  token or cost savings are not promised.
-- Host checks and pinned dependencies do not certify live OpenCode compatibility
-  or provider behavior. Review your setup before relying on it.
-- Keep credentials, runtime data, logs, and local state out of Git. OpenArms state
-  uses `$XDG_STATE_HOME/openarms/state.json`, or `~/.local/state/openarms/state.json`.
-  Setup does not copy authentication or overwrite installed configuration.
+## Tài liệu
 
-## Documentation
-
-- [Project skills: format, controls, and migration](docs/guides/skill-management.md)
-- [Optional controller/scout/implementer profiles](docs/guides/local-opencode.md)
-- [Architecture](docs/architecture/README.md)
-- [Testing policy and commands](docs/testing/testing.md)
-- [Full documentation index](docs/README.md) — includes historical designs and reports.
+- [Mục lục](docs/README.md)
+- [Migration 0.1 → 0.2 và xử lý bản cài cũ](docs/guides/migration.md)
+- [Skills](docs/guides/skill-management.md)
+- [Output/logs](docs/guides/output-compaction.md)
+- [Architecture](docs/architecture/Architecture.md)
+- [Testing/manual checklist](docs/testing/testing.md)
+- [Tài liệu lịch sử](docs/archive/README.md) — không phải contract hiện hành
 
 ## License
 
-The OpenArms engine uses the [MIT License](LICENSE). Bundled skills keep their
-own license files; only skills with an explicit license are included.
+Engine MIT; bundled `skills/` giữ license riêng. Thư viện mẫu không tự đăng ký vào host.
