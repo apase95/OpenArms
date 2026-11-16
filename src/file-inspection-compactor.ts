@@ -5,7 +5,7 @@ export function isFileInspection(toolName?: string, command = "") {
   return toolName === "read" || /^(?:\/[^\s'";|&<>`$]+\/)?cat(?:\s+(?:--|-[AbenstuvET]+|"[^"\n`$]+"|'[^'\n]+'|[^\s'";|&<>`$]+))*\s*$/.test(command.trim())
 }
 
-/** Called only AFTER the raw sink. No filesystem access/probes; sizes are observed bytes. */
+/** Pure inspection only; no filesystem probes. The original is saved before publishing changes. */
 export function compactFileInspection(raw: string, path?: string): Compaction | undefined {
   let reason: string | undefined
   if (/\x00/.test(raw) || /^(?:<type>binary<\/type>|(?:Error: )?Cannot (?:display|read) (?:a )?binary file[^\n]*)$/im.test(raw)) reason = "binary content"
