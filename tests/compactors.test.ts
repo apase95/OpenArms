@@ -2,6 +2,10 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { governOutput } from "../src/output-governor.ts"
 import { buildOutputCompactor as compiler } from "../src/build-output-compactor.ts"
+import { testOutputCompactor } from "../src/test-output-compactor.ts"
+import { linterOutputCompactor } from "../src/linter-output-compactor.ts"
+import { gitDiffOutputCompactor, classifyDiffFile } from "../src/git-diff-output-compactor.ts"
+import { compactFileInspection, isFileInspection } from "../src/file-inspection-compactor.ts"
 
 test("C++ template prelude and webpack messages are parsed rather than fallback", () => {
   const raw = "a.cc: In instantiation of ‘void convert(T) [with T = Widget]’:\na.cc:40:8:   required from here\na.cc:3:2: error: no matching function for call to ‘convert(Widget)’\n  3 |\tconvert(value);\n    |\t^~~~~~~\na.cc:1:1: note: candidate expects 2 arguments\n"
@@ -108,4 +112,42 @@ test("standard compiler families, first five errors and ANSI preserve diagnostic
   assert.ok(result.text.includes("issue-4"))
   assert.ok(!result.text.includes("issue-5"))
   assert.ok(result.text.includes("3 additional build errors"))
+})
+
+test("test compactor keeps first failure evidence, summary and bounded UTF8 output", () => {
+  const raw = "PASS tests/ok.test.ts\n".repeat(2000) + "FAIL tests/bad.test.ts\nAssertionError: EXPECTED_FAILURE\nTests: 1 failed, 2000 passed\n"
+  const result = testOutputCompactor.compact(raw, { maxBytes: 4000 })
+  assert.match(result.text, /EXPECTED_FAILURE/)
+  assert.match(result.text, /1 failed/)
+  assert.ok(Buffer.byteLength(result.text) < 4000)
+  assert.equal(testOutputCompactor.match("jest", "UNKNOWN FATAL RECORD"), false)
+})
+
+test("linter compactor retains diagnostics and falls back on unknown formats", () => {
+  const raw = "a.py:1:2: E999 invalid syntax\n".repeat(1000)
+  const result = linterOutputCompactor.compact(raw, { maxBytes: 4000 })
+  assert.match(result.text, /E999|invalid syntax/)
+  assert.ok(Buffer.byteLength(result.text) <= 4000)
+  assert.equal(linterOutputCompactor.match("eslint", "UNKNOWN FATAL RECORD"), false)
+})
+
+test("git compactor preserves source diff and collapses large generated changes", async () => {
+  const diff = (file: string, before: string, after: string) => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-${before}\n+${after}\n`
+  const source = diff("src/main.ts", "old", "SOURCE_EVIDENCE")
+  const raw = source + diff("package-lock.json", "x".repeat(100000), "y".repeat(100000))
+  const result = await governOutput(raw, { command: "git diff", save: async () => "raw.log" })
+  assert.ok(result.text.includes(source)); assert.match(result.text, /package-lock.json.*omitted/)
+  assert.ok(result.contextBytes < 6000)
+  assert.equal(classifyDiffFile("src/main.ts"), "high")
+  assert.equal(classifyDiffFile("package-lock.json"), "low")
+  const malformed = raw + "unexpected fatal diagnostic\n"
+  assert.equal(gitDiffOutputCompactor.match("git diff", malformed), false)
+})
+
+test("inspection only recognizes bounded cat syntax and retains ordinary text", () => {
+  assert.ok(isFileInspection("bash", "cat a.txt"))
+  for (const command of ["echo cat a", "cat a | other", "cat $(probe)", "cat a && probe"]) assert.equal(isFileInspection("bash", command), false)
+  assert.equal(compactFileInspection("ordinary file\n"), undefined)
+  assert.match(compactFileInspection("a\x00b")!.text, /binary content/)
+  assert.match(compactFileInspection("var a=1;".repeat(1000))!.text, /minified bundle/)
 })
