@@ -41,20 +41,36 @@ file IPC hoặc synchronization selection. `skills/` chỉ là mẫu có license
 
 ## 3. Skill catalog và request
 
-1. Mở `/skills` → gọi `app.skills({directory})` với directory hiện tại.
+1. Mở `/skills` → snapshot directory và route home/session (kèm session ID), rồi gọi `app.skills({directory})`.
 2. Validate response shape/name/location/content; lỗi hiển thị ERROR; duplicate names bị từ chối request.
 3. Host DialogSelect lọc; Inspect hiển thị preview tối đa khoảng 12.000 UTF-8 byte + marker.
-4. Request refresh catalog và kiểm tra name/location còn tồn tại, không ERROR.
-5. Gọi `tui.appendPrompt({directory,text})`; kiểm tra host response, không submit.
+   Preview giữ newline, blank lines và tabs; CRLF được chuẩn hóa, ANSI/control không cần thiết bị loại.
+   Title/description trong danh sách vẫn single-line.
+4. Callbacks giữ target ban đầu. Request kiểm tra target trước và sau refresh catalog,
+   kiểm tra name/location còn tồn tại và không ERROR; target đổi thì không bắt đầu append mới.
+5. Gọi `tui.appendPrompt({directory,text})` với lifecycle abort signal; kiểm tra response và
+   target sau await, không submit hoặc tự retry khi kết quả chưa rõ.
 
 Không ghi skills vào system prompt và không custom frontmatter reader. Native tool
 của host xử lý nạp nội dung theo yêu cầu và permission. Full content có thể được trả về
 trong API để preview nhưng không tự đi vào model context.
 
-Không replace Prompt slots, không intercept Enter, không reset editor. Khi host directory
-đổi hoặc plugin dispose trong lúc fetch, UI cũ không được mở. TUI API append theo semantics
-host; chưa bảo đảm single-client targeting/atomic ownership giữa nhiều clients. Người dùng
-phải ở normal prompt mode và review draft trước gửi. Không tuyên bố đã load skill sau append.
+Không replace Prompt slots, không intercept Enter, không reset editor. Directory/session
+đổi trong lúc fetch hoặc callback cũ được gọi sẽ không mở UI/action cho target mới; dispose
+làm callbacks không còn tác dụng. Chỉ route home hoặc session có ID hợp lệ được chấp nhận.
+
+TUI API append không có session ID/compare-and-append. Guard phía client không thể loại
+bỏ race trong RPC hoặc phát hiện mọi lần chuyển đi rồi quay lại giữa hai lần kiểm tra.
+Đổi target khi append đang chạy → `APPEND_UNCONFIRMED`, không success toast, không clear
+dialog của context mới, không retry. Lỗi transport sau khi đã gửi append cũng là trạng thái
+chưa xác định; request có thể đã tới host. Người dùng kiểm tra drafts trước khi thử lại.
+Không bảo đảm single-client targeting/atomic ownership giữa nhiều clients; vẫn cần normal
+prompt mode và review draft trước gửi. Không tuyên bố đã load skill sau append.
+
+Catalog errors có code/messages cố định: `CATALOG_UNSUPPORTED`,
+`CATALOG_CONNECTION_FAILED`, `CATALOG_REJECTED`, `CATALOG_INVALID_RESPONSE`.
+Transport/request throw được phân loại request failure, không suy ra chính xác nguyên nhân
+mạng từ exception tùy ý. Raw exceptions và host response bodies không đi vào thông báo.
 
 Host có thể loại file lỗi hoặc resolve tên trùng trước khi trả catalog; ERROR chỉ mô tả lỗi
 quan sát trong response, không phải filesystem audit hoàn chỉnh. Không API capability → báo lỗi,

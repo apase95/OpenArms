@@ -33,19 +33,31 @@ nếu muốn dùng, thêm absolute path của nó vào `skills.paths` và review
 ## `/skills`
 
 1. Mở browser, gõ để lọc tên/description bằng host UI.
-2. Chọn skill → **Inspect** xem location và body preview.
+2. Chọn skill → **Inspect** xem location và body preview, giữ xuống dòng/tab của Markdown/code.
 3. **Request in draft** refresh catalog và append instruction gọi native `skill` tool.
+   Browser giữ directory/session (hoặc home) ban đầu; đổi target trước append sẽ bị chặn,
+   kể cả khi directory vẫn giữ nguyên.
 4. Review draft, chắc chắn đang normal mode, bổ sung task rồi tự gửi.
 
 Request không phải execution acknowledgement. OpenArms không tạo session, không submit,
 không đổi model và không đánh dấu “Loaded”. Existing draft không bị reset; request được
 append có newline. Native skill tool sẽ hỏi/chặn theo host permissions nếu cần.
-Không có bảo đảm atomic single-client targeting của host append endpoint.
+Nếu chuyển session/directory trong khi append RPC đang chạy hoặc request bị lỗi sau khi gửi,
+OpenArms báo `APPEND_UNCONFIRMED`, không báo thành công, không tự retry và không tự clear dialog.
+Kiểm tra drafts trước khi thử lại vì host có thể đã nhận request. API không có session ID hoặc
+compare-and-append, nên client guards không bảo đảm atomic targeting hoặc mọi chuyển đi/quay lại
+trong cùng request; không có bảo đảm single-client targeting giữa nhiều TUI clients.
 
 ## ERROR và troubleshooting
 
 - Response thiếu trường/name không hợp lệ/tên trùng: ERROR, không có Request action.
-- Không có `app.skills` hoặc mất kết nối: báo lỗi; không chuyển sang scanner riêng.
+- `CATALOG_UNSUPPORTED`: host thiếu `app.skills`; kiểm tra/nâng phiên bản OpenCode.
+- `CATALOG_CONNECTION_FAILED`: lời gọi catalog thất bại/throw; kiểm tra kết nối và host.
+  Đây không phải chẩn đoán chắc chắn nguyên nhân mạng.
+- `CATALOG_REJECTED`: host trả error; xem cấu hình và diagnostics phía host.
+- `CATALOG_INVALID_RESPONSE`: response shape không hợp lệ; kiểm tra tương thích host/SDK.
+- Các lỗi dùng code/messages cố định, không hiển thị raw exception/response hoặc fallback scanner.
+- `DRAFT_TARGET_CHANGED`: context đã khác lúc mở browser; mở lại `/skills` trong prompt muốn dùng.
 - Catalog rỗng: kiểm tra native directories/`skills.paths` và refresh/restart host.
 - Skill file lỗi không hiện: xem host diagnostics; host có thể bỏ file trước khi trả catalog.
 - Tên trùng đã bị host override trước response: OpenArms không phát hiện được bản bị che.
