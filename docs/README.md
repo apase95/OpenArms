@@ -1,33 +1,40 @@
-# OpenArms 0.2 — tài liệu hiện hành
+# OpenArms — bắt đầu từ đây
 
-**Phạm vi:** native skill browser + output compactor. Mọi ý tưởng control plane,
-workflow engine, traces, usage/budget, installers và session lifecycle trong tài liệu
-trước đây không còn là roadmap đã được chấp thuận.
+OpenArms 0.2 có hai chức năng: **trình duyệt skill native** và **rút gọn tool output**
+cho OpenCode. [README dự án](../README.md) chứa hướng dẫn cài đặt; phần dưới giúp bạn
+chọn đúng tài liệu, không cần đọc toàn bộ cây thư mục.
 
-| Tài liệu | Nội dung |
+## Chọn lộ trình
+
+| Bạn muốn… | Đọc theo thứ tự |
 |---|---|
-| [README](../README.md) | Cài đặt và cách dùng |
-| [Features](features.md) | Chức năng giữ lại / đã gỡ / giới hạn |
-| [Architecture](architecture/Architecture.md) | Host boundary, catalog adapter, output pipeline |
-| [Skill management](guides/skill-management.md) | Native discovery, inspect, request; không ON/OFF |
-| [Output compaction](guides/output-compaction.md) | Parsers, cap, artifact privacy/retention |
-| [Migration](guides/migration.md) | Upgrade có review, bảo toàn data và bỏ rules cũ |
-| [Testing](testing/testing.md) | Small host checks và manual acceptance |
-| [Contributor guide](contributing/GETTING_STARTED.md) | Cấu trúc code và nguyên tắc maintain |
-| [Archive](archive/README.md) | Snapshot tài liệu/nghiên cứu trước redesign, không dùng như hướng dẫn hiện hành |
+| Sử dụng lần đầu | [Cài đặt](../README.md#cai-dat) → [Skills](skills.md) → [Output và logs](output.md) |
+| Nâng cấp bản cũ | [Migration](migration.md) → [Nghiệm thu](verification.md#manual-acceptance) |
+| Kiểm tra kết quả bàn giao | [Trạng thái kiểm chứng](verification.md#evidence) → [Checklist nghiệm thu](verification.md#manual-acceptance) |
+| Sửa code / xây tính năng | [Kiến trúc](architecture.md) → [Development](development.md) → [Verification](verification.md) |
+| Tìm ý tưởng tham khảo | [Harness notes](harnesses.md) — đọc tùy chọn, không phải roadmap |
 
-## Nguồn sự thật
+## Mỗi chủ đề chỉ có một nơi chuẩn
 
-- Server entry chỉ đăng ký `tool.execute.after`.
-- TUI `/skills` dùng native catalog và host dialogs/keymap; không thay Prompt component.
-- Skill loading và host permissions vẫn do OpenCode quyết định.
-- Code có test không đồng nghĩa đã chạy trên provider hay live TUI thật.
-- Task này không triển khai bản installed trong `~/.config/opencode/`.
+| Trang | Chịu trách nhiệm | Không chứa |
+|---|---|---|
+| [skills.md](skills.md) | Library, browser, request và lỗi skill | Cài plugin, test commands |
+| [output.md](output.md) | Compaction, giới hạn, log privacy và retention | Usage dashboard hoặc budget |
+| [architecture.md](architecture.md) | Ownership, module map, luồng dữ liệu | Hướng dẫn sử dụng lặp lại |
+| [development.md](development.md) | Quy trình sửa code và quy tắc maintain | Bản sao checklist nghiệm thu |
+| [verification.md](verification.md) | Commands, evidence và release gates | Tuyên bố live pass không có bằng chứng |
+| [migration.md](migration.md) | Config/data/deploy/rollback khi nâng cấp | Script tự sửa môi trường người dùng |
+| [harnesses.md](harnesses.md) | Nguồn kiến trúc bên ngoài và bài học giới hạn | Cam kết thêm tính năng mới |
 
-## Checklist khi cập nhật docs
+Lỗi được tra ngay trong trang tính năng tương ứng; không có một FAQ lặp lại mọi nội dung.
+Mọi checkbox nghiệm thu chưa đánh dấu đều là việc **chưa được xác nhận hoàn tất**.
 
-- [ ] Không quảng bá tính năng đã gỡ như hiện hành.
-- [ ] Phân biệt host capability, OpenArms behavior và manual acceptance chưa làm.
-- [ ] Link active trỏ tới docs hiện hành; lịch sử phải đi qua archive và có nhãn rõ.
-- [ ] Không hứa token savings, OS isolation hoặc hard budget.
-- [ ] Cập nhật migration nếu đổi config/library/entry paths hoặc output artifacts.
+## Tài liệu trước cải tổ
+
+Các phase tasklists, sprint reports và archive cũ đã được gỡ khỏi cây docs để tránh
+nhầm hợp đồng lịch sử với sản phẩm hiện tại. Chúng vẫn còn trong
+[snapshot Git `75afd87`](https://github.com/apase95/OpenArms/tree/75afd87/docs/archive).
+Snapshot có lệnh và đường dẫn cũ; chỉ tra cứu, không chạy như hướng dẫn cho 0.2.
+
+Ba bản nghiên cứu dài trước đây được tóm lược thành [Harness notes](harnesses.md);
+quy trình nâng cấp thực tế nằm ở [Migration](migration.md), không phải audit/FIX IDs cũ.

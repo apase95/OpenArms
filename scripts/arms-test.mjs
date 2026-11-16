@@ -53,7 +53,7 @@ const run = argv => {
 function walk(folder) {
   return readdirSync(folder, { withFileTypes: true }).flatMap(entry => {
     const file = path.join(folder, entry.name)
-    if (entry.name === "archive" || entry.isSymbolicLink()) return []
+    if (entry.isSymbolicLink()) return []
     return entry.isDirectory() ? walk(file) : [file]
   })
 }
@@ -74,7 +74,7 @@ function syntax() {
       if (!existsSync(path.resolve(path.dirname(file), target))) throw Error(`Missing doc link: ${file} → ${target}`)
     }
   }
-  console.log("check: types, local imports and active documentation links passed (archive excluded)")
+  console.log("check: types, local imports and documentation links passed")
 }
 function policy() {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"))

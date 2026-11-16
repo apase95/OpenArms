@@ -34,5 +34,9 @@ providers or operate on the user's OpenCode database/configuration.
 - Logs are private observed-output artifacts, not usage telemetry. Never edit `.gitignore`
   or delete conversation/state data as a side effect of running a tool.
 - Do not modify `~/.config/opencode`, install Git hooks, or deploy automatically.
-- Historical docs are in `docs/archive/`; do not execute their scripts or treat old
-  contracts as current. Keep active docs aligned with implemented behavior.
+- Docs are flat and topic-owned: use [the docs index](docs/README.md) to choose the
+  canonical page. Do not add duplicate overviews, sprint reports or archive folders.
+- Historical contracts are available through Git history, not current setup instructions.
+  Keep implemented behavior in the topic guides, checks/evidence in
+  [verification](docs/verification.md), and contributor workflow in
+  [development](docs/development.md).
