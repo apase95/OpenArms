@@ -1,38 +1,38 @@
 # Repository development guidance
 
-Run checks from the repository root through `node scripts/arms-test.mjs`.
+OpenArms has only two runtime features: native skill browsing and output compaction.
+Do not reintroduce usage/budget, installers, session lifecycle, multi-agent workflow,
+permission/grant engines or automatic skill injection without a new explicit decision.
 
-1. Review one plan per task: `node scripts/arms-test.mjs verify --plan`.
-   Supply repeated `--file <path>` for a known task scope, or `--base <revision>`
-   for committed changes. Explicit files replace Git discovery; include the whole
-   task scope, including removed paths.
-2. After significant edits use `syntax`; at task completion use `verify` once.
-   If T0 already passed with unchanged inputs, use the remaining modes listed in
-   the plan explicitly. Run T1 at most once for an unchanged code/test revision.
-   Full covers T1: do not run both `related` and `full` for the same revision.
-3. Full tests are justified by shared/core or test infrastructure changes, or an
-   explicit user request. Verify/pre-push are host-only. Sandbox/TUI smoke is
-   reference-only and runs solely through an explicitly requested smoke mode;
-   integration classifications do not schedule it automatically.
-4. `needs-review` is a configuration error: add a reviewed mapping and related
-   tests before verification. Never resolve unknown files by silently running all
-   modes, or by omitting an affected file from the changed-file list.
-5. Do not repeatedly run unchanged failing commands. Diagnose the failure before
-   retrying. T0/T1/T2 are not cached; smoke passes are fingerprinted and reused.
-   Use `--force` for an intentional smoke rerun, `--rebuild` for image rebuild.
-   After two identical failures the runner blocks another unchanged retry;
-   override only after diagnosis with `--force --reason "<reason>"`.
-   Read the full log referenced by a failure instead of rerunning for more output.
-   Do not call static/runtime/TUI independently when one verify plan covers them.
-6. Use `npm run test:policy` to report bypasses in changed automation. Legacy
-   `test:raw` and `sandbox/manage.mjs` commands are diagnostic escape hatches;
-   document the reason when using them. `baseline` is an explicit observation
-   exception, not the ordinary verification path.
+## Small host checks
 
-Do not install Git hooks or change global configuration automatically. See
-`docs/testing/testing.md` for opt-in CI/pre-push commands and baseline collection.
-Opt in before push with `npm run test:pre-push -- --base <revision>`: host full
-tests in one invocation. CI sets `CI=true` to distrust local smoke stamps only
-when smoke is explicitly requested. Docker/Python/PTY are not host-check requirements.
-Missing capabilities block an explicit smoke request, not host verification. Record real tasks
-with `--task <task-id>`; review rollout using `npm run test:acceptance`.
+Run from the repository root with a Node.js version allowed by `package.json` engines.
+The pinned SDK's transitive dependencies require newer patch releases than Node 22.19:
+
+1. `npm ci` when dependencies change.
+2. Review one task scope: `node scripts/arms-test.mjs verify --plan --task <id>`.
+   Repeated `--file <path>` replaces Git discovery; include removed paths. Use
+   `--base <revision>` for a committed scope, not together with `--file`.
+3. After significant code edits: `node scripts/arms-test.mjs syntax` (`npm run check`).
+4. At completion: `node scripts/arms-test.mjs verify` (`npm test`). If syntax already
+   passed with unchanged code/test inputs, use `full` for the remaining unit suite.
+5. Run `npm run test:policy` when automation changes. Unknown scope is `needs-review`:
+   add a reviewed rule rather than omitting paths. Read failures before retrying;
+   do not repeatedly run unchanged failing checks.
+
+`arms-test.mjs` is a thin entrypoint: TypeScript, local imports, active docs links,
+and the complete small Node unit suite. There are no test tiers, selective mappings,
+cache, smoke modes, Docker/Python/PTY prerequisites, acceptance ledgers or Git hooks.
+`full` runs only the unit suite; it is not live OpenCode acceptance. No checks contact
+providers or operate on the user's OpenCode database/configuration.
+
+## Safety and upgrade boundaries
+
+- Preserve host tool title/metadata; never invent exit codes or rewrite native skill results.
+- Read skills through the host catalog; host owns loading and permissions.
+- Do not reset/auto-submit the user's draft or replace the host prompt component.
+- Logs are private observed-output artifacts, not usage telemetry. Never edit `.gitignore`
+  or delete conversation/state data as a side effect of running a tool.
+- Do not modify `~/.config/opencode`, install Git hooks, or deploy automatically.
+- Historical docs are in `docs/archive/`; do not execute their scripts or treat old
+  contracts as current. Keep active docs aligned with implemented behavior.
