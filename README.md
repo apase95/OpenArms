@@ -6,8 +6,10 @@
 
 **Native skill browser + output compactor cho OpenCode.**
 
-- `/arms-skills`: danh sách tên theo Alphabet → **ON / OFF / REQUEST** theo project.
-  OFF chặn native skill calls; REQUEST chỉ append yêu cầu vào draft.
+- `/arms-skills`: lệnh duy nhất mở **Skills management / Output compaction / Features**.
+  Vào **Features** → chọn chức năng → **ON / OFF** theo project, mặc định ON.
+  Vào **Skills management** → tên skill theo Alphabet → **ON / OFF / REQUEST**.
+  OFF từng skill chặn native skill calls; REQUEST chỉ append yêu cầu vào draft.
   `/skills` vẫn là lệnh native của OpenCode, không bị plugin thay thế.
 - Output compactor: rút gọn tool text, giữ đường truy xuất original khi output thay đổi.
 
@@ -67,8 +69,10 @@ và làm sạch legacy có tại [Migration](docs/migration.md#checkout-link).
 ## Dùng ngay
 
 1. Thêm skill native theo [Skills](docs/skills.md#library).
-2. Mở `/arms-skills` → chọn tên skill → **ON / OFF / REQUEST**. Mặc định ON theo lựa chọn
-   OpenArms; host vẫn có thể deny. Cần server/TUI local cùng filesystem để dùng switches.
+2. Mở `/arms-skills` → **Features** để bật/tắt cả chức năng; **Skills management** để chọn
+   skill → **ON / OFF / REQUEST**. Chỉ một lệnh vào menu tổng, vẫn tôn trọng feature OFF.
+   Cần server/TUI local cùng filesystem. Xem [Feature controls](docs/features.md) trước khi
+   OFF quản lý skill: thao tác này ngừng opt-outs của OpenArms, không deny mọi native skill.
 3. **REQUEST** → review draft ở normal mode rồi tự gửi. **ON** sau OFF có thể cần restart
    để refresh native permission cache; không tự bỏ deny của người dùng. Chi tiết ở [Skills](docs/skills.md#project-switches).
 4. Khi tool output bị rút gọn, tra markers/log theo [Output](docs/output.md).
@@ -78,7 +82,7 @@ retention tại trang Output trước khi sử dụng với source/credentials q
 
 ## Đọc tiếp theo vai trò
 
-- **Người dùng:** [Docs index](docs/README.md) → Skills → Output.
+- **Người dùng:** [Docs index](docs/README.md) → [Features](docs/features.md) → Skills → Output.
 - **Người nghiệm thu:** [Verification](docs/verification.md) — evidence, phần chưa kiểm chứng, checklist.
 - **Contributor:** [Architecture](docs/architecture.md) → [Development](docs/development.md).
 - **Nâng cấp:** [Migration](docs/migration.md) — config, data preservation, deploy và rollback.

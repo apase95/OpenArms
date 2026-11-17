@@ -5,6 +5,11 @@ The explicit project-skill decision permits deny-only ON/OFF preferences in
 `.openarms/skills.json`, native in-memory permission denies and a skill before-hook.
 ON removes only OpenArms restrictions; it never grants host permission. This does not
 permit a grants/approval engine, global config writes or legacy state migration.
+Project-level feature controls are explicitly permitted in `.openarms/features.json`:
+skills-management and output-compaction only, default ON. The Features menu must remain
+reachable with both OFF. Disabling skills-management suspends OpenArms skill restrictions;
+it must not remove user-native denies or delete saved skill choices. Output OFF is a
+complete passthrough with no new raw-output artifacts.
 Do not reintroduce usage/budget, installers, session lifecycle, multi-agent workflow,
 permission/grant engines or automatic skill injection without a new explicit decision.
 

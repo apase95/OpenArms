@@ -8,7 +8,7 @@ chọn đúng tài liệu, không cần đọc toàn bộ cây thư mục.
 
 | Bạn muốn… | Đọc theo thứ tự |
 |---|---|
-| Sử dụng lần đầu | [Cài đặt](../README.md#cai-dat) → [Skills](skills.md) → [Output và logs](output.md) |
+| Sử dụng lần đầu | [Cài đặt](../README.md#cai-dat) → [Features](features.md) → [Skills](skills.md) → [Output và logs](output.md) |
 | Nâng cấp bản cũ | [Migration](migration.md) → [Nghiệm thu](verification.md#manual-acceptance) |
 | Kiểm tra kết quả bàn giao | [Trạng thái kiểm chứng](verification.md#evidence) → [Checklist nghiệm thu](verification.md#manual-acceptance) |
 | Sửa code / xây tính năng | [Kiến trúc](architecture.md) → [Development](development.md) → [Verification](verification.md) |
@@ -18,6 +18,7 @@ chọn đúng tài liệu, không cần đọc toàn bộ cây thư mục.
 
 | Trang | Chịu trách nhiệm | Không chứa |
 |---|---|---|
+| [features.md](features.md) | Menu chính, ON/OFF runtime features theo project, flag storage và lỗi | Quản lý từng skill, parser/log details |
 | [skills.md](skills.md) | Library, browser, request và lỗi skill | Cài plugin, test commands |
 | [output.md](output.md) | Compaction, giới hạn, log privacy và retention | Usage dashboard hoặc budget |
 | [architecture.md](architecture.md) | Ownership, module map, luồng dữ liệu | Hướng dẫn sử dụng lặp lại |

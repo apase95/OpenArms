@@ -3,7 +3,7 @@
 [← Mục lục](README.md)
 
 Trang này phục vụ contributor, reviewer và người nghiệm thu. Feature behavior nằm ở
-[Skills](skills.md) / [Output](output.md); ở đây chỉ ghi cách kiểm tra, kết quả và phần còn thiếu.
+[Features](features.md) / [Skills](skills.md) / [Output](output.md); ở đây chỉ ghi cách kiểm tra, kết quả và phần còn thiếu.
 
 <a id="evidence"></a>
 ## 1. Trạng thái bằng chứng
@@ -13,7 +13,9 @@ Trang này phục vụ contributor, reviewer và người nghiệm thu. Feature 
 | Browser fixes, commit `75afd87` | Typecheck/import/doc links và **41 offline unit tests pass** | Node `24.12.0`, chưa phải phiên bản trong engines |
 | Tái cấu trúc docs, sau `75afd87` | Typecheck/import/doc links, explicit anchors, `test:policy`, whitespace và **41 unit tests pass** | Node `24.12.0`; không thay live acceptance |
 | Project skill switches, trước footer | Syntax, policy, whitespace và **50 offline unit tests pass** trên Node `26.13.1` | Chưa live acceptance ON/OFF |
-| Dialog Back/Done, working tree | Syntax và **54 offline unit tests pass**, Node `26.13.1` | Frame adapter mocked; chưa live JSX/layout/mouse/shortcut acceptance |
+| Dialog Back/Done, commit `6f714df` | Syntax và **54 offline unit tests pass**, Node `26.13.1` | Frame adapter mocked; chưa đầy đủ live JSX/layout/mouse/shortcut acceptance |
+| Project feature controls + single command, trước OFF coloring | Syntax và **67 offline unit tests pass**, Node `26.13.1` | Chưa live single `/arms-skills`/feature OFF acceptance; không thêm dependencies |
+| OFF skill coloring, working tree | Syntax và **71 offline unit tests pass**, Node `26.13.1` | Pure color/filter/window helpers + injected list adapter; live color/keyboard/wheel/layout chưa nghiệm thu |
 | Clean install trên Node hỗ trợ | `npm ci --ignore-scripts` pass, Node `26.13.1` | Chưa kiểm chứng install scripts hoặc live host; audit warnings còn bên dưới |
 | Installed runtime / live TUI / provider | **Chưa nghiệm thu** | Source push không phải deploy hoặc live acceptance |
 
@@ -63,9 +65,15 @@ không bỏ file để vượt qua check. Chạy policy khi automation đổi.
 
 Suite bao phủ catalog validation/safe errors, names-only Alphabet và ba action rows,
 footer Back/Done (root/actions/empty), invalidated callbacks và async completion sau close,
-project ON/OFF persistence/isolation/exclusive writes, native deny integration/skill guard,
+OFF row color precedence kể cả selected, stable values/filter Alphabet/bounded list window,
+single `/arms-skills` registration/full root menu, feature ON/OFF không REQUEST,
+recovery khi mọi feature OFF, project flags
+persistence/isolation/exclusive writes, independent skill choices, native deny integration/skill guard,
 policy fail-closed, draft preservation và stale targets, in-flight uncertainty, parser
 UTF-8/cap/fallback, metadata preservation, native-skill output bypass, private logs/retention.
+Output OFF/unknown state giữ nguyên text và không ghi artifacts; Skills management OFF
+bypass OpenArms opt-outs nhưng không grant native permission. Both-enabled defaults giữ
+hành vi cũ; shared storage vẫn được kiểm tra symlink/private file/lock/schema.
 Preview/pagination đã được bỏ khỏi browser. Mocks thay host boundary, không thay parser.
 Không API keys, providers, DB host hay global config trong unit tests.
 
@@ -87,20 +95,23 @@ code revision và environment trước khi đánh dấu.
 
 | ID | Thao tác | Kết quả cần quan sát |
 |---|---|---|
-| A1 | Refresh library, mở `/arms-skills` | Dialog **OpenArms skills** chỉ có names theo Alphabet, không description/preview/packages; `/skills` native giữ nguyên |
-| A2 | Chọn skill; thử Back/Done ở list/actions/empty, click và Alt+← / Alt+Enter, đóng khi save/append đang chờ | Ba action rows giữ nguyên; footer ở dưới, không bị filter; Back về list/root đóng; Done giữ preference/draft; completion không reopen/clear UI mới; shortcuts không còn active ở dialog host khác |
+| A1 | Gõ `/arms`, mở `/arms-skills` → Skills management | Chỉ một lệnh `/arms-skills`; menu đầy đủ; catalog names Alphabet, OFF chữ đỏ kể cả selected và khi lọc, ON màu theme; OFF vẫn chọn được để bật ON; ↑/↓/PageUp/PageDown/wheel/click đúng với catalog dài; `/skills` native giữ nguyên |
+| A2 | Chọn skill; thử Back/Done ở list/actions/empty, click và Alt+← / Alt+Enter, đóng khi save/append đang chờ | Ba action rows giữ nguyên; footer ở dưới, không bị filter; Back về list/menu chính; Done giữ preference/draft; completion không reopen/clear UI mới; shortcuts không còn active ở dialog host khác |
 | A3 | Request với draft/attachments sẵn có ở normal mode | Append không mất input, không tự submit/đổi model |
 | A4 | Đổi session cùng directory trong lúc browser/refresh | Không bắt đầu append từ callback của target cũ |
 | A5 | Đổi target sau khi append đã gửi | Báo unconfirmed, không success/clear/retry; kiểm tra drafts thủ công, không suy ra atomic cancel |
 | A6 | Gửi task dùng native skill với host ask/deny | Host permission được tôn trọng, skill output không bị rewrite |
 | A7 | Command success/failure có output dài | Diagnostics/status được giữ, transformed output có observed original khi save thành công |
 | A8 | Storage không dùng được trên project tạm | Marker save failure, không path giả, metadata không đổi |
-| A9 | Quan sát filesystem/config sau thao tác | Chỉ project `skills.json` và output logs mới được phép theo contract; không usage/handoff/legacy state, DB/global config/draft side effects |
+| A9 | Quan sát filesystem/config sau thao tác | Chỉ project `skills.json`, `features.json` và output logs mới được phép theo contract (temp/locks theo store); không usage/handoff/legacy state, DB/global config/draft side effects |
 | A10 | OFF skill rồi yêu cầu native skill qua model (cả session có cached approvals nếu có) | REQUEST bị từ chối; server skill guard chặn subsequent calls, không chỉ UI; tool đã in-flight không được coi là bị hủy |
 | A11 | ON sau OFF, restart host và thử lại | OpenArms deny được gỡ sau refresh; host deny nguyên có vẫn giữ, không auto-allow |
-| A12 | Đổi subdirectory/project, restart server/TUI | Cùng worktree giữ preference, project khác độc lập; file private, no symlink/unsafe-store bypass |
+| A12 | Đổi subdirectory/project, restart server/TUI | Cùng worktree giữ skill preferences và feature flags, project khác độc lập; private files, no symlink/unsafe-store bypass |
+| A13 | `/arms-skills` → Features → mỗi feature → ON/OFF, tắt cả hai rồi bật lại | Root có Features cuối cùng, luôn truy cập được; bảng feature chỉ ON/OFF, không REQUEST; Back/Done đúng tầng; không auto-submit |
+| A14 | OFF Output compaction rồi chạy supported tool output dài; ON lại | OFF giữ nguyên observed text/title/metadata, không log mới/prune log cũ; ON khôi phục compaction khi cần |
+| A15 | Skill OFF riêng → OFF Skills management; restart; ON lại feature | Browser bị gate, main menu vẫn mở; opt-out guard không enforce khi feature OFF; saved skill choices còn nguyên để restore khi ON, native user deny không bị gỡ; corrupted flag file không giả định ON |
 
-- [ ] Ghi kết quả từng A1–A12, evidence và blockers; giữ unchecked nếu chưa thử.
+- [ ] Ghi kết quả từng A1–A15, evidence và blockers; giữ unchecked nếu chưa thử.
 - [ ] Chạy clean install/checks trên Node được hỗ trợ.
 - [ ] Xác minh server/TUI cùng revision và khả năng rollback theo [Migration](migration.md).
 - [ ] Test case failure/unknown không được trình bày thành pass chung.
@@ -119,7 +130,7 @@ Revision / phạm vi:
 Node / OpenCode / dependency versions:
 Plugin URLs và revision thực sự được nạp (nếu đã deploy):
 Commands + results + nơi lưu full log nếu có:
-Manual A1–A12: pass / fail / skipped + evidence:
+Manual A1–A15: pass / fail / skipped + evidence:
 Node engine warning / blockers:
 Chưa kiểm chứng:
 Migration / rollback:

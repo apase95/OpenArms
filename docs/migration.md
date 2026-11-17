@@ -64,7 +64,7 @@ Cleanup legacy data là thao tác riêng sau backup và xác nhận không còn 
 ## 5. Sau deploy
 
 - [ ] Server/TUI cùng revision; restart đúng runtime path.
-- [ ] Kiểm tra tất cả A1–A12 trong [Manual acceptance](verification.md#manual-acceptance), ghi evidence.
+- [ ] Kiểm tra tất cả A1–A15 trong [Manual acceptance](verification.md#manual-acceptance), ghi evidence.
 - [ ] Xác nhận UI và filesystem không còn side effects của tính năng đã gỡ.
 - [ ] Nếu kết quả ambiguous hoặc rollback cần thiết, dừng automation, kiểm tra drafts/data trước retry.
 
@@ -128,7 +128,9 @@ riêng theo [Skills](skills.md#library). Quyền skill vẫn do host quyết đ�
 
 - Sửa source → [host checks](verification.md#host-checks) → restart client/server nạp plugin.
   Source chưa commit/đổi branch cũng có hiệu lực sau restart; ghi revision và dirty state.
-- Dùng `/arms-skills` hoặc palette **Browse native skills (OpenArms)**. Các bản đầu 0.2
+- Chỉ dùng `/arms-skills` (palette **OpenArms**) cho menu chính. Chọn **Skills management**
+  để mở catalog hoặc **Features → ON/OFF** để đổi chức năng. Bản thử nghiệm từng có thêm
+  `/arms-skill` cho menu tổng; lệnh số ít đã bỏ, không giữ alias. Các bản đầu 0.2
   đăng ký `/skills` trùng lệnh native của OpenCode `1.19.3`; tên mới tránh tranh lệnh host.
   Không cần đổi hai plugin URLs. Browser mới là **OpenArms skills**, danh sách names →
   ON/OFF/REQUEST; Inspect/preview đã bỏ. Dialog native **Skills** không xác nhận browser plugin đã load.
@@ -136,7 +138,11 @@ riêng theo [Skills](skills.md#library). Quyền skill vẫn do host quyết đ�
   không ghi global config. Cần cả server/TUI local cùng checkout/filesystem; restart cả hai sau upgrade.
   Khi ON sau OFF đã cached vào native permissions, restart host; không tự bỏ deny của người dùng.
   Chi tiết và giới hạn tại [Project switches](skills.md#project-switches).
-- Kiểm tra [A1–A12](verification.md#manual-acceptance), không coi JSON fragments hoặc unit
+- Feature flags mới lưu `.openarms/features.json`, mặc định ON khi file chưa có, không
+  migrate/delete `.openarms/skills.json`. Không cần sửa plugin URLs hoặc global config.
+  OFF Skills management ngừng OpenArms opt-outs, không deny tất cả native skills; cached
+  denies có thể cần restart. Chi tiết tại [Features](features.md).
+- Kiểm tra [A1–A15](verification.md#manual-acceptance), không coi JSON fragments hoặc unit
   tests là bằng chứng plugin đã load. Không có bảo đảm hot reload hay mọi host version.
 - Tháo nối: xóa **đúng hai URLs checkout** khỏi các nguồn đã thêm, restart host; giữ plugins
   khác và artifacts. Không cần uninstall, xóa DB, xóa state hoặc đổi permissions.

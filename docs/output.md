@@ -4,7 +4,13 @@
 
 ## 1. Output nào được xử lý?
 
-Server xử lý text từ `bash`, `read`, `grep`, `glob`, `list`. Có parser cho test,
+Bật/tắt pipeline theo project tại `/arms-skills` → **Features → Output compaction → ON/OFF**.
+Mặc định ON. OFF hoặc không đọc được feature settings thì giữ nguyên output, không tạo
+artifact mới; không xóa log cũ. Feature flag được đọc lại trước mỗi supported after-hook,
+không hủy compaction/save đã in-flight. Log cutting và tinh chỉnh output không tách riêng
+khỏi evidence pipeline. Persistence và error policy có một nguồn ở [Features](features.md).
+
+Khi ON, server xử lý text từ `bash`, `read`, `grep`, `glob`, `list`. Có parser cho test,
 build/compiler, linter, git diff và guard file-inspection; format không nhận diện
 được đi qua generic fallback. Không rewrite command, thêm `--silent` hoặc chặn file.
 

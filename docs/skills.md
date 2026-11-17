@@ -34,13 +34,21 @@ parse frontmatter hoặc đọc package manifests legacy. Host quyết định r
 ## 2. Browser
 
 1. Mở OpenCode global trong **project**, restart sau khi thay plugin source.
-2. Gõ `/arms-skills` hoặc palette **Browse native skills (OpenArms)**.
+2. Gõ `/arms-skills` → **Skills management**, hoặc palette **OpenArms** rồi chọn mục đó.
+   Chỉ một slash command cho menu tổng. Feature phải ON; khi OFF, browser và stale actions
+   đều bị từ chối. Cách bật lại ở [Features](features.md).
 3. Dialog **OpenArms skills** chỉ có tên skills, sắp xếp Alphabet; gõ để lọc.
-   Không descriptions, content preview hoặc nhóm package. `/skills` vẫn thuộc host.
+   Skill OFF trong project hiện tại có **chữ đỏ**, kể cả khi đang chọn; ON dùng màu theme
+   bình thường. Đây là lựa chọn OpenArms, không phải kết luận host đã allow/deny.
+   OFF vẫn chọn được để bật ON. Sau toggle rồi Back, màu được cập nhật; mở lại catalog
+   để đọc thay đổi từ client khác. Không thêm description, preview, package hoặc suffix tên.
+   Tìm kiếm không phân biệt hoa/thường, hỗ trợ subsequence và giữ thứ tự Alphabet.
+   Dùng ↑/↓, PageUp/PageDown, wheel hoặc click; danh sách dài render theo cửa sổ bounded.
+   `/skills` vẫn thuộc host.
 4. Chọn skill: title hiện tên và lựa chọn **ON/OFF**, menu luôn có ba dòng:
    **ON**, **OFF**, **REQUEST**. Phía dưới mọi dialog OpenArms (cả catalog rỗng) có
    **Back** và **Done**, không lẫn vào danh sách/filter:
-   - **Back** về danh sách names; ở danh sách gốc hoặc empty state thì đóng browser.
+   - **Back** về danh sách names; ở danh sách gốc hoặc empty state thì về menu OpenArms.
    - **Done** đóng browser, không đổi preference đã lưu hoặc draft.
    - Có thể click nút, dùng **Alt+←** cho Back, **Alt+Enter** cho Done; Esc vẫn đóng.
    Các nút chỉ thuộc OpenArms, không sửa dialog native của OpenCode.
@@ -58,6 +66,9 @@ Phạm vi hiện tại: **TUI và server local, cùng filesystem và cùng check
 switches với remote attach/SSH tách filesystem. Cần cả hai plugin active; browser riêng
 không chứng minh server đang enforce. Đây không phải sandbox trước code/plugin đối địch.
 
+- Các quy tắc dưới đây áp dụng khi **Skills management ON**. Feature OFF ngừng browser và
+  opt-out enforcement của OpenArms, giữ choices để bật lại; cached native denies cần restart.
+  Đây không phải OFF từng skill; xem [Feature controls](features.md).
 - Mặc định mọi skill **ON theo lựa chọn OpenArms**, không đồng nghĩa host đã allow.
 - **OFF** lưu tên skill rồi server before-hook đọc lại preferences để chặn lần gọi native
   `skill` tiếp theo, kể cả session đang có permission/approval cached. Guard chỉ deny,
@@ -126,6 +137,8 @@ ban đầu sau khi đổi route; không cập nhật UI của project mới ho�
 | `DRAFT_TARGET_CHANGED` | Mở lại browser tại đúng project/session; write đã in-flight có thể đã lưu ở project cũ. |
 | `SKILL_CHANGED` / `ERROR` | Refresh catalog, review library/metadata hoặc trùng tên. |
 | `SKILL_OFF` | Chọn ON nếu muốn request, sau đó restart nếu native config còn cached deny. |
+| `FEATURE_OFF` | Mở `/arms-skills` → Features → Skills management → ON. |
+| `FEATURE_STATE_UNAVAILABLE` | Review `.openarms/features.json`; không tự coi feature OFF/unknown là ON. |
 | `POLICY_READ_FAILED` / `SKILL_POLICY_UNAVAILABLE` | Review private storage và nội dung preferences; không tự coi lỗi là tất cả ON. |
 | `POLICY_WRITE_FAILED` | Review project path, permissions, tên skill và lock; refresh trước retry. |
 | `APPEND_UNCONFIRMED` | Kiểm tra drafts trước retry, không suy ra chắc append thất bại. |
