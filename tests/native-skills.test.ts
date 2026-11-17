@@ -2,13 +2,19 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { setImmediate } from "node:timers/promises"
 import { installSkillBrowser, listNativeSkills, parseSkills, skillRequest } from "../src/native-skills.ts"
+import type { FeatureID } from "../src/project-features.ts"
 
 const skill = { name: "writing", description: "Edit clearly", location: "/library/writing/SKILL.md", content: "Full instructions" }
 
 function fixture() {
-  let dialog: any, command: any, dispose = () => {}, draft = "existing task\n", appendCalls = 0, unregisters = 0
+  let dialog: any, dispose = () => {}, draft = "existing task\n", appendCalls = 0, registrations = 0
   let onClose: (() => void) | undefined
   const toasts: any[] = [], disabled = new Set<string>(), roots: string[] = []
+  const featureDisabled = new Set<FeatureID>()
+  const features = {
+    read: async () => [...featureDisabled],
+    set: async (name: FeatureID, enabled: boolean) => { if (enabled) featureDisabled.delete(name); else featureDisabled.add(name); return [...featureDisabled] },
+  }
   const controller = new AbortController()
   const state = { path: { directory: "/workspace/subdir", worktree: "/workspace" } }
   const route: { current: { name: string; params?: { sessionID?: string } } } = { current: { name: "session", params: { sessionID: "session-a" } } }
@@ -30,15 +36,16 @@ function fixture() {
         clear: () => { const close = onClose; onClose = undefined; dialog = undefined; close?.() },
       },
     },
-    keymap: { registerLayer: (layer: any) => { command = layer.commands[0]; return () => { unregisters++ } } },
+    keymap: { registerLayer: (_layer: any) => { registrations++; return () => {} } },
     lifecycle: { signal: controller.signal, onDispose: (callback: any) => { dispose = callback } },
   }
-  installSkillBrowser(api as any, (render, footer) => ({ ...render() as any, footer }), root => { roots.push(root); return store })
-  return { api, client, store, disabled, roots, toasts, state, route,
-    get dialog() { return dialog }, get command() { return command }, get draft() { return draft },
-    get appendCalls() { return appendCalls }, get unregisters() { return unregisters },
+  const browser = installSkillBrowser(api as any, (render, footer) => ({ ...render() as any, footer }), root => { roots.push(root); return store }, { features: () => features, skillList: props => api.ui.DialogSelect(props) })
+  return { api, client, store, disabled, features, featureDisabled, roots, toasts, state, route,
+    get dialog() { return dialog }, get draft() { return draft },
+    get appendCalls() { return appendCalls }, get registrations() { return registrations },
+    start: () => { void browser.open() },
     dispose: () => { controller.abort(); dispose() },
-    open: async () => { command.run(); await setImmediate() },
+    open: async () => { void browser.open(); await setImmediate() },
   }
 }
 
@@ -76,8 +83,7 @@ test("browser shows only sorted names, no descriptions/content/packages; exactly
   const f = fixture()
   f.client.app.skills = async () => ({ data: [{ ...skill, name: "z" }, { ...skill, name: "a" }] })
   await f.open()
-  assert.equal(f.command.slashName, "arms-skills")
-  assert.equal(f.command.name, "openarms.skills")
+  assert.equal(f.registrations, 0) // The browser must not register a second slash command.
   assert.deepEqual(f.dialog.options, [{ title: "a", value: 0 }, { title: "z", value: 1 }])
   f.dialog.onSelect({ value: 0 })
   assert.equal(f.dialog.title, "a · ON")
@@ -85,6 +91,27 @@ test("browser shows only sorted names, no descriptions/content/packages; exactly
   assert.deepEqual(f.dialog.options.map((s: any) => s.title), ["ON", "OFF", "REQUEST"])
   assert.doesNotMatch(JSON.stringify(f.dialog), /Full instructions|Edit clearly|Inspect|Preview/)
   assert.deepEqual(f.roots, ["/workspace"])
+})
+
+test("list exposes OFF rows by stable value and updates them after ON/OFF and Back without changing names/order", async () => {
+  const f = fixture()
+  f.client.app.skills = async () => ({ data: [
+    { ...skill, name: "paper-writing" }, { ...skill, name: "document-service" }, { ...skill, name: "docs-editor" },
+  ] })
+  f.disabled.add("document-service")
+  await f.open()
+  assert.deepEqual(f.dialog.options.map((row: any) => row.title), ["docs-editor", "document-service", "paper-writing"])
+  assert.deepEqual([...f.dialog.offValues], [1])
+  f.dialog.onSelect({ value: 1 })
+  assert.equal(f.dialog.title, "document-service · OFF")
+  f.dialog.onSelect({ value: "on" }); await setImmediate()
+  f.dialog.footer.back()
+  assert.deepEqual([...f.dialog.offValues], [])
+  f.dialog.onSelect({ value: 0 }); f.dialog.onSelect({ value: "off" }); await setImmediate()
+  f.dialog.footer.back()
+  assert.deepEqual([...f.dialog.offValues], [0])
+  assert.deepEqual(f.dialog.options.map((row: any) => row.title), ["docs-editor", "document-service", "paper-writing"])
+  assert.equal(f.appendCalls, 0)
 })
 
 test("all browser dialogs expose Back and Done; actions Back returns to names and root Back closes", async () => {
@@ -141,7 +168,7 @@ test("navigation during request revalidation stops append; in-flight writes do n
   await request.open(); request.dialog.onSelect({ value: 0 })
   let resolveCatalog: any
   request.client.app.skills = () => new Promise(r => { resolveCatalog = r })
-  request.dialog.onSelect({ value: "request" })
+  request.dialog.onSelect({ value: "request" }); await setImmediate()
   request.dialog.footer.back()
   resolveCatalog({ data: [skill] }); await setImmediate()
   assert.equal(request.appendCalls, 0)
@@ -203,7 +230,7 @@ test("request appends without reset/submit and rechecks preferences changed by a
   assert.match(f.draft, /native skill tool to load "writing"/)
   assert.equal(f.appendCalls, 1)
   assert.equal(f.dialog, undefined)
-  f.dispose(); assert.equal(f.unregisters, 1)
+  f.dispose(); assert.equal(f.registrations, 0)
 })
 
 test("unreadable policy fails closed for list/request; failed writes do not show success", async () => {
@@ -246,7 +273,7 @@ test("route/dispose changes during discovery and policy read do not open stale U
     let resolve: any
     if (stage === "catalog") f.client.app.skills = () => new Promise(r => { resolve = r })
     else f.store.read = () => new Promise(r => { resolve = r })
-    f.command.run(); await setImmediate()
+    f.start(); await setImmediate()
     f.route.current = { name: "session", params: { sessionID: "session-b" } }
     resolve(stage === "catalog" ? { data: [skill] } : []); await setImmediate()
     assert.equal(f.dialog, undefined)
@@ -272,7 +299,7 @@ test("revalidation in flight cannot mutate after target changes", async () => {
     await f.open(); f.dialog.onSelect({ value: 0 })
     let resolve: any
     f.client.app.skills = () => new Promise(r => { resolve = r })
-    f.dialog.onSelect({ value: action })
+    f.dialog.onSelect({ value: action }); await setImmediate()
     f.route.current = { name: "home" }
     resolve({ data: [skill] }); await setImmediate()
     assert.equal(f.appendCalls, 0); assert.equal(f.disabled.size, 0)
@@ -312,6 +339,28 @@ test("in-flight append is uncertain on route changes or false/error results; nev
     assert.match(f.toasts.at(-1).message, /APPEND_UNCONFIRMED/)
     assert.doesNotMatch(JSON.stringify(f.toasts), /secret/)
   }
+})
+
+test("skills-management OFF gates the browser and stale actions without changing saved skill choices", async () => {
+  const off = fixture()
+  off.featureDisabled.add("skills-management")
+  await off.open()
+  assert.equal(off.dialog, undefined)
+  assert.match(off.toasts.at(-1).message, /FEATURE_OFF/)
+  for (const action of ["on", "off", "request"]) {
+    const f = fixture()
+    await f.open(); f.dialog.onSelect({ value: 0 })
+    f.featureDisabled.add("skills-management")
+    f.dialog.onSelect({ value: action }); await setImmediate()
+    assert.equal(f.appendCalls, 0); assert.equal(f.disabled.size, 0)
+    assert.match(f.toasts.at(-1).message, /FEATURE_OFF/)
+  }
+  const corrupt = fixture()
+  corrupt.features.read = async () => { throw Error("secret feature details") }
+  await corrupt.open()
+  assert.equal(corrupt.dialog, undefined)
+  assert.match(corrupt.toasts.at(-1).message, /FEATURE_STATE_UNAVAILABLE/)
+  assert.doesNotMatch(JSON.stringify(corrupt.toasts), /secret/)
 })
 
 test("home is a valid request target; unrelated routes cannot start the browser", async () => {

@@ -1,6 +1,8 @@
 import { stripVTControlCharacters } from "node:util"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { projectSkills, type ProjectSkills } from "./project-skills.ts"
+import { projectFeatures, featureEnabled, type FeatureStores } from "./project-features.ts"
+import type { SkillListProps, SkillListRenderer } from "./skill-list.ts"
 
 export type SkillEntry = { name: string; description: string; location: string; content: string; error?: string }
 const errorMessages = {
@@ -14,6 +16,8 @@ const errorMessages = {
   APPEND_UNSUPPORTED: "This host does not expose tui.appendPrompt; upgrade OpenCode to request a skill in the draft.",
   APPEND_UNCONFIRMED: "Cannot confirm the skill request in the original prompt. Check drafts before retrying; no automatic retry will occur.",
   SKILL_OFF: "This skill is OFF for this project. Select ON before requesting it.",
+  FEATURE_OFF: "Skills management is OFF for this project. Enable it through /arms-skills → Features.",
+  FEATURE_STATE_UNAVAILABLE: "Cannot verify project feature settings. Review .openarms/features.json before retrying.",
   POLICY_READ_FAILED: "Cannot verify project skill preferences. Check .openarms/skills.json and private directory permissions; no request was appended.",
   POLICY_WRITE_FAILED: "Cannot confirm the preference change. Check project path, private storage, skill name and lock; refresh before retrying.",
 } as const
@@ -73,7 +77,8 @@ export function skillRequest(entry: SkillEntry) {
 }
 
 /** Local global-host plugin: public dialogs only, no Prompt replacement or config writes. */
-export function installSkillBrowser(api: TuiPluginApi, frame: DialogFrame, stores: (root: string) => ProjectSkills = projectSkills) {
+export function installSkillBrowser(api: TuiPluginApi, frame: DialogFrame, stores: (root: string) => ProjectSkills = projectSkills,
+  options: { features?: FeatureStores; onBack?: () => void; skillList?: SkillListRenderer } = {}) {
   let disposed = false, loading = false, busy = false, view = 0
   const present = (render: (active: () => boolean) => ReturnType<TuiPluginApi["ui"]["DialogAlert"]>, back: () => void) => {
     const token = ++view
@@ -112,22 +117,31 @@ export function installSkillBrowser(api: TuiPluginApi, frame: DialogFrame, store
     notify(new SkillBrowserError("DRAFT_TARGET_CHANGED"), "DRAFT_TARGET_CHANGED")
     return false
   }
+  const requireFeature = async (target: DraftTarget) => {
+    let enabled: boolean
+    try { enabled = await featureEnabled((options.features ?? projectFeatures)(target.projectRoot), "skills-management") }
+    catch { throw new SkillBrowserError("FEATURE_STATE_UNAVAILABLE") }
+    if (!enabled) throw new SkillBrowserError("FEATURE_OFF")
+  }
   const readPolicy = async (browser: Browser) => {
     try { browser.disabled = new Set(await browser.store.read()) }
     catch { throw new SkillBrowserError("POLICY_READ_FAILED") }
   }
-  const showList = async () => {
+  const showList = async (parentActive: () => boolean = () => true) => {
     if (disposed || loading || busy) return
     loading = true
     const openedFrom = view
+    const active = () => view === openedFrom && parentActive()
     try {
       const target = draftTarget()
       if (!target) throw new SkillBrowserError("DRAFT_TARGET_UNAVAILABLE")
+      await requireFeature(target)
+      if (!checkTarget(target) || !active()) return
       const entries = await listNativeSkills(api.client, target.directory)
-      if (!checkTarget(target) || view !== openedFrom) return
+      if (!checkTarget(target) || !active()) return
       const browser: Browser = { target, store: stores(target.projectRoot), disabled: new Set(), entries }
       await readPolicy(browser)
-      if (!checkTarget(target) || view !== openedFrom) return
+      if (!checkTarget(target) || !active()) return
       renderList(browser)
     } catch (error) { notify(error, "CATALOG_CONNECTION_FAILED") }
     finally { loading = false }
@@ -135,14 +149,18 @@ export function installSkillBrowser(api: TuiPluginApi, frame: DialogFrame, store
   const renderList = (browser: Browser) => {
     if (!checkTarget(browser.target)) return
     if (!browser.entries.length) {
-      present(() => api.ui.DialogAlert({ title: "OpenArms skills", message: "No skills reported by OpenCode. Add native skills or configure skills.paths, then refresh the host." }), close)
+      present(() => api.ui.DialogAlert({ title: "OpenArms skills", message: "No skills reported by OpenCode. Add native skills or configure skills.paths, then refresh the host." }), options.onBack ?? close)
       return
     }
-    present(active => api.ui.DialogSelect({
-      title: "OpenArms skills", placeholder: "Filter skills",
-      options: browser.entries.map((entry, index) => ({ title: clean(entry.name), value: index })),
-      onSelect: option => { if (active()) showActions(browser.entries[option.value], browser) },
-    }), close)
+    present(active => {
+      const props: SkillListProps = {
+        title: "OpenArms skills", placeholder: "Filter skills",
+        options: browser.entries.map((entry, index) => ({ title: clean(entry.name), value: index })),
+        offValues: new Set(browser.entries.flatMap((entry, index) => browser.disabled.has(entry.name) ? [index] : [])),
+        onSelect: option => { if (active()) showActions(browser.entries[option.value], browser) },
+      }
+      return options.skillList ? options.skillList(props) : api.ui.DialogSelect(props)
+    }, options.onBack ?? close)
   }
   const showActions = (entry: SkillEntry, browser: Browser) => {
     if (!checkTarget(browser.target)) return
@@ -166,8 +184,11 @@ export function installSkillBrowser(api: TuiPluginApi, frame: DialogFrame, store
     }), () => renderList(browser))
   }
   const revalidate = async (entry: SkillEntry, browser: Browser, token: number) => {
+    await requireFeature(browser.target)
+    if (!checkTarget(browser.target) || view !== token) return
     const current = (await listNativeSkills(api.client, browser.target.directory))
       .find(skill => skill.name === entry.name && skill.location === entry.location)
+    await requireFeature(browser.target)
     if (!checkTarget(browser.target) || view !== token) return
     if (!current || current.error) throw new SkillBrowserError("SKILL_CHANGED")
     return current
@@ -193,6 +214,7 @@ export function installSkillBrowser(api: TuiPluginApi, frame: DialogFrame, store
       const current = await revalidate(entry, browser, token)
       if (!current) return
       await readPolicy(browser)
+      await requireFeature(browser.target)
       if (!checkTarget(browser.target) || view !== token) return
       if (browser.disabled.has(entry.name)) { showActions(entry, browser); throw new SkillBrowserError("SKILL_OFF") }
       if (typeof api.client.tui?.appendPrompt !== "function") throw new SkillBrowserError("APPEND_UNSUPPORTED")
@@ -206,9 +228,7 @@ export function installSkillBrowser(api: TuiPluginApi, frame: DialogFrame, store
     } catch (error) { notify(error, "APPEND_UNCONFIRMED") }
     finally { busy = false }
   }
-  const unregister = api.keymap.registerLayer({
-    commands: [{ name: "openarms.skills", title: "Browse native skills (OpenArms)", namespace: "palette",
-      slashName: "arms-skills", desc: "Project skill ON/OFF or request in draft", run: () => { void showList() } }], bindings: [],
-  })
-  api.lifecycle.onDispose(() => { disposed = true; ++view; unregister() })
+  // The root menu owns the sole /arms-skills command; this controller is internal.
+  api.lifecycle.onDispose(() => { disposed = true; ++view })
+  return { open: showList }
 }
