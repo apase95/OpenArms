@@ -6,7 +6,9 @@
 
 Đọc [Architecture](architecture.md) trước. Clone/setup plugin theo [README](../README.md),
 dùng Node đáp ứng `package.json` engines rồi cài dependencies bằng `npm ci`.
-SDK/OpenTUI optional peers không cần cho offline unit suite; live TUI vẫn cần host phù hợp.
+SDK và OpenTUI/Solid UI type dependencies được pin trong dev dependencies; npm ci cần
+cài chúng để typecheck footer JSX. Offline unit tests inject frame adapter, không tạo
+renderer/TTY; live TUI vẫn cần host tương thích và runtime shared do host cung cấp.
 
 ```text
 plugins/   # Hai entry adapters
@@ -33,7 +35,9 @@ không duy trì bản sao ở trang này. Quy tắc cho coding agents ở [AGENT
 
 ## 3. Invariants cần giữ
 
-- Native skills do host discovery/load/authorize; không tạo loader/state/permission engine thứ hai.
+- Native skills do host discovery/load/authorize. Project switches chỉ lưu deny-only opt-outs,
+  thêm native config denies và guard skill calls; không grants, custom loader hay legacy state engine.
+  ON không grant hoặc bỏ host deny. Global config không bị ghi bởi switches.
 - Không reset/auto-submit draft, thay Prompt component hoặc tự đổi model.
 - Skill/custom tool output bypass; supported tool title/metadata không bị sửa hoặc suy ra exit code.
 - Parsers không có I/O; save original observed text trước publish transformed result.

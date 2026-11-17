@@ -1,6 +1,10 @@
 # Repository development guidance
 
-OpenArms has only two runtime features: native skill browsing and output compaction.
+OpenArms has two runtime features: native skills and output compaction.
+The explicit project-skill decision permits deny-only ON/OFF preferences in
+`.openarms/skills.json`, native in-memory permission denies and a skill before-hook.
+ON removes only OpenArms restrictions; it never grants host permission. This does not
+permit a grants/approval engine, global config writes or legacy state migration.
 Do not reintroduce usage/budget, installers, session lifecycle, multi-agent workflow,
 permission/grant engines or automatic skill injection without a new explicit decision.
 

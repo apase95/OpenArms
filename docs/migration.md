@@ -10,7 +10,7 @@ tự thay `~/.config/opencode/openarms-runtime`; không có script tự sửa co
 
 | Bản cũ | Bản 0.2 |
 |---|---|
-| Package manifests, ON/OFF, grants/hash approvals, selection state và auto-injection | Native host catalog; request skill khi cần |
+| Package manifests, grants/hash approvals, selection state và auto-injection | Native host catalog, REQUEST; project ON/OFF mới chỉ lưu deny-only opt-outs, không dùng legacy state |
 | Usage/budget/context meter, telemetry/shadow/file rules | Không còn |
 | Download/audit/decompile/install skill | Không còn; user quản lý library qua host |
 | Handoff/rotation/lifecycle, controller/scout/implementer profiles | Không còn |
@@ -64,12 +64,85 @@ Cleanup legacy data là thao tác riêng sau backup và xác nhận không còn 
 ## 5. Sau deploy
 
 - [ ] Server/TUI cùng revision; restart đúng runtime path.
-- [ ] Kiểm tra tất cả A1–A9 trong [Manual acceptance](verification.md#manual-acceptance), ghi evidence.
+- [ ] Kiểm tra tất cả A1–A12 trong [Manual acceptance](verification.md#manual-acceptance), ghi evidence.
 - [ ] Xác nhận UI và filesystem không còn side effects của tính năng đã gỡ.
 - [ ] Nếu kết quả ambiguous hoặc rollback cần thiết, dừng automation, kiểm tra drafts/data trước retry.
 
 Lưu commands/results vào PR/release bằng [mẫu bàn giao](verification.md#handoff-template).
 Unit tests không tự đánh dấu live migration đã hoàn tất.
+
+<a id="checkout-link"></a>
+## 6. Global nguyên bản + plugin từ checkout
+
+Mục tiêu là bỏ OpenArms legacy, không factory-reset cấu hình cá nhân hoặc sửa binary
+OpenCode. Hai file URLs là điểm ghép nối duy nhất; không copy `openarms-runtime`, không
+symlink cả config directory và không đổi global Node/OpenCode trong cùng migration.
+
+### Gỡ legacy thủ công trước khi nối lại
+
+1. Đóng các OpenCode clients **và servers** dùng runtime cũ trước khi tạo session mới.
+   Một số installed runtimes có `auto-prune.ts` được gọi từ `session.created` và có SQL
+   xóa sessions cũ. Không chạy runtime đó để thử, không phục hồi hook này khi rollback.
+2. Backup riêng các config sẽ sửa và runtime cần đối chiếu, vào thư mục private nằm
+   **ngoài** config directories host khám phá. Backup database, nếu cần, là thao tác
+   riêng sau khi dừng writers; không dùng cleanup script legacy.
+3. Review cả `opencode.json` **và** `opencode.jsonc`, `tui.json` **và** `tui.jsonc`,
+   `config.json` nếu có, `~/.opencode`, project overrides và các `OPENCODE_CONFIG*` /
+   `OPENCODE_TUI_CONFIG` env overrides. Các nguồn merge; `{ "plugin": [] }` trong một
+   file không bảo đảm gỡ plugins đến từ nguồn khác. Review cả `plugin/` và `plugins/`
+   tự khám phá, không chỉ entries khai báo trong JSON.
+4. Gỡ URLs trỏ vào `openarms-runtime`, prompts controller/implementer, `openarms_usage`,
+   agent overrides và các denies ép custom skill loader đã xác định ở mục 3. Nếu toàn
+   bộ override `build`/`explore`/`general` là legacy thì gỡ override đó để host dùng built-ins;
+   gỡ custom scout/implementer agents legacy thay vì giữ permission fragments rời rạc.
+5. Giữ providers/models, MCP, notifier/Herdr, instructions và permissions cá nhân không
+   thuộc OpenArms. Comment shell có chữ OpenArms không chứng minh provider env thuộc
+   plugin; không xóa credentials hoặc source env đang dùng chỉ theo tên/comment.
+6. Sau review, chuyển code/runtime, thư viện `packages/` legacy và config backups thuộc
+   OpenArms ra ngoài active config; không xóa state/handoff/conversations. Không tự
+   chuyển packages cũ thành native skills. Giữ artifacts không xác định ownership để review.
+7. Kiểm tra baseline không OpenArms trên workspace tạm trước khi thêm hai URLs mới.
+   Ghi host version và các plugin bên thứ ba còn giữ; đây không phải baseline zero-plugin.
+
+### Nối trực tiếp checkout
+
+Từ checkout chạy:
+
+```bash
+node scripts/opencode-link.mjs
+```
+
+Lệnh resolve root từ vị trí script, không từ working directory; kiểm tra hai entry files
+đọc được và xuất URLs đã encode. Không đọc config/credentials, không gọi host/provider,
+không ghi file, cài package hay có mode `--apply`. `--help` in hướng dẫn.
+
+Output là object chứa hai fragments. Merge giá trị key `opencode.json` vào server config,
+key `tui.json` vào TUI config, giữ entries khác. **Không redirect output vào config hoặc
+paste cả object vào một file.** Xóa URL legacy trước, tránh nạp hai bản plugin; host dedupe
+bằng file URL không hợp nhất hai checkout khác đường dẫn.
+
+Không thêm bundled library tự động. Khi cần, review skills rồi cấu hình native `skills.paths`
+riêng theo [Skills](skills.md#library). Quyền skill vẫn do host quyết định.
+
+### Test, tháo nối và rollback
+
+- Sửa source → [host checks](verification.md#host-checks) → restart client/server nạp plugin.
+  Source chưa commit/đổi branch cũng có hiệu lực sau restart; ghi revision và dirty state.
+- Dùng `/arms-skills` hoặc palette **Browse native skills (OpenArms)**. Các bản đầu 0.2
+  đăng ký `/skills` trùng lệnh native của OpenCode `1.19.3`; tên mới tránh tranh lệnh host.
+  Không cần đổi hai plugin URLs. Browser mới là **OpenArms skills**, danh sách names →
+  ON/OFF/REQUEST; Inspect/preview đã bỏ. Dialog native **Skills** không xác nhận browser plugin đã load.
+- ON/OFF mới lưu riêng `.openarms/skills.json` theo project. Không import trạng thái ON/OFF legacy,
+  không ghi global config. Cần cả server/TUI local cùng checkout/filesystem; restart cả hai sau upgrade.
+  Khi ON sau OFF đã cached vào native permissions, restart host; không tự bỏ deny của người dùng.
+  Chi tiết và giới hạn tại [Project switches](skills.md#project-switches).
+- Kiểm tra [A1–A12](verification.md#manual-acceptance), không coi JSON fragments hoặc unit
+  tests là bằng chứng plugin đã load. Không có bảo đảm hot reload hay mọi host version.
+- Tháo nối: xóa **đúng hai URLs checkout** khỏi các nguồn đã thêm, restart host; giữ plugins
+  khác và artifacts. Không cần uninstall, xóa DB, xóa state hoặc đổi permissions.
+- Nếu cần quay lại baseline sạch, dùng config đã review không có OpenArms. Không khôi phục
+  nguyên config legacy có dangerous hooks chỉ để rollback. Không xóa checkout khi còn URL
+  đang trỏ tới nó.
 
 ## Tra lịch sử
 

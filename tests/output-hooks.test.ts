@@ -6,9 +6,9 @@ import path from "node:path"
 import { outputHooks } from "../src/output-hooks.ts"
 import { SkillRouterServer } from "../plugins/skill-router-server.ts"
 
-test("server registers only output processing; no skill injection, usage or lifecycle hooks", async () => {
+test("server registers output and project skill restrictions only; no injection or lifecycle hooks", async () => {
   const hooks = await SkillRouterServer({ directory: "/unused", worktree: "/" } as any)
-  assert.deepEqual(Object.keys(hooks), ["tool.execute.after"])
+  assert.deepEqual(Object.keys(hooks).sort(), ["config", "tool.execute.after", "tool.execute.before"])
 })
 
 test("hook preserves failure metadata/title and only writes a raw log for transformed output", async t => {

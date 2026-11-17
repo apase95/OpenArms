@@ -6,7 +6,9 @@
 
 **Native skill browser + output compactor cho OpenCode.**
 
-- `/skills`: xem catalog của host, preview skill và đưa yêu cầu dùng skill vào draft.
+- `/arms-skills`: danh sách tên theo Alphabet → **ON / OFF / REQUEST** theo project.
+  OFF chặn native skill calls; REQUEST chỉ append yêu cầu vào draft.
+  `/skills` vẫn là lệnh native của OpenCode, không bị plugin thay thế.
 - Output compactor: rút gọn tool text, giữ đường truy xuất original khi output thay đổi.
 
 OpenCode vẫn sở hữu model, agent loop, loading và permissions. OpenArms không tự gửi
@@ -27,8 +29,16 @@ cd OpenArms
 npm ci
 ```
 
-Giữ checkout/runtime ở vị trí ổn định. **Merge** server entry vào `opencode.json`,
-không thay toàn bộ config hoặc xóa plugins khác:
+Giữ checkout ở vị trí ổn định. In các fragments với URLs đúng checkout hiện tại:
+
+```bash
+node scripts/opencode-link.mjs
+```
+
+Lệnh chỉ kiểm tra hai entry files và in JSON, không đọc/ghi global config hoặc tự deploy.
+Output có hai keys `opencode.json` và `tui.json`: lấy fragment tương ứng bên trong để
+merge vào từng file, **không** dán cả object output vào một config. Không redirect output
+đè global config. **Merge** server entry vào `opencode.json`, giữ plugins khác:
 
 ```json
 {
@@ -48,15 +58,19 @@ Merge TUI entry vào `tui.json` riêng:
 }
 ```
 
-Thay absolute paths đúng nơi triển khai, rồi restart host. Restart chỉ reload path đó,
-không đồng bộ checkout với installed runtime. Không có script tự ghi config, copy
-credentials hay dọn database người dùng.
+Thay absolute paths đúng checkout, rồi restart client/server đang nạp plugin. Không cần
+copy runtime vào global config: sửa source → chạy checks → restart host để test trực tiếp.
+Đổi branch hoặc uncommitted edits cũng đổi code nạp lần sau; không có hot reload được bảo đảm.
+Không có script tự ghi config, copy credentials hay dọn database người dùng. Cách tháo nối
+và làm sạch legacy có tại [Migration](docs/migration.md#checkout-link).
 
 ## Dùng ngay
 
 1. Thêm skill native theo [Skills](docs/skills.md#library).
-2. Mở `/skills` → **Inspect** hoặc **Request in draft**.
-3. Review draft ở normal mode rồi tự gửi; OpenCode quyết định native tool/permission.
+2. Mở `/arms-skills` → chọn tên skill → **ON / OFF / REQUEST**. Mặc định ON theo lựa chọn
+   OpenArms; host vẫn có thể deny. Cần server/TUI local cùng filesystem để dùng switches.
+3. **REQUEST** → review draft ở normal mode rồi tự gửi. **ON** sau OFF có thể cần restart
+   để refresh native permission cache; không tự bỏ deny của người dùng. Chi tiết ở [Skills](docs/skills.md#project-switches).
 4. Khi tool output bị rút gọn, tra markers/log theo [Output](docs/output.md).
 
 Logs có thể chứa dữ liệu nhạy cảm. Không share/commit raw artifacts; xem privacy và

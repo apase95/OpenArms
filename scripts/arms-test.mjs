@@ -59,7 +59,9 @@ function walk(folder) {
 }
 function syntax() {
   run(["node_modules/typescript/lib/tsc.js", "--noEmit"])
-  for (const file of ["scripts/arms-test.mjs", ...walk("src"), ...walk("plugins"), ...walk("tests")]) {
+  const scripts = walk("scripts").filter(file => file.endsWith(".mjs"))
+  for (const file of scripts) run(["--check", file])
+  for (const file of [...scripts, ...walk("src"), ...walk("plugins"), ...walk("tests")]) {
     const source = readFileSync(file, "utf8")
     for (const match of source.matchAll(/(?:from\s*|import\s*)["'](\.[^"']+)["']/g)) {
       if (!existsSync(path.resolve(path.dirname(file), match[1]))) throw Error(`Missing import: ${file} → ${match[1]}`)

@@ -7,20 +7,24 @@
 | Thành phần | Sở hữu |
 |---|---|
 | OpenCode | Agent loop, model calls, native skill discovery/loading, tools, permissions, conversation persistence |
-| OpenArms TUI | Browse/inspect host catalog, stage skill request trong draft |
-| OpenArms server | Transform supported tool text, lưu observed-output artifacts |
+| OpenArms TUI | Catalog names, project ON/OFF, stage request trong draft |
+| OpenArms server | Project skill denies/guard; transform supported output, lưu observed-output artifacts |
 
-Không shared selection/state database, custom permission engine hoặc conversation DB
-cạnh tranh. Skill browser và output compactor độc lập; không có model routing hay
-session/task orchestration trong OpenArms.
+Không grants/approval database hoặc conversation DB cạnh tranh. Quyết định project ON/OFF
+cho phép file opt-out tối thiểu `.openarms/skills.json`, native in-memory permission denies
+và deny-only skill before-hook. ON không cấp quyền hoặc bỏ deny của host. Skill browser và
+output compactor độc lập; không model routing hay session/task orchestration.
 
 ```mermaid
 flowchart TD
     User[User] --> Browser[OpenArms browser]
     Browser --> Catalog[OpenCode app.skills]
+    Browser -->|ON/OFF| Prefs[(Project skills.json)]
+    Prefs --> Deny[Native config denies + skill before-hook]
     Browser -->|append request only| Draft[Host draft]
     Draft -->|user submits| Loop[OpenCode loop]
-    Loop --> Skill[Native skill / host permission]
+    Loop --> Deny
+    Deny --> Skill[Native skill / host permission]
     Loop --> Tools[Supported tools]
     Tools --> Hook[OpenArms after-hook]
     Hook --> Parsers[Pure compactors / fallback]
@@ -34,8 +38,10 @@ flowchart TD
 | Đường dẫn | Trách nhiệm |
 |---|---|
 | [`plugins/skill-router-tui.tsx`](../plugins/skill-router-tui.tsx) | Entry giữ path/ID tương thích, cài browser |
-| [`src/native-skills.ts`](../src/native-skills.ts) | Validate catalog, safe error codes, dialogs, target guards và draft request |
-| [`plugins/skill-router-server.ts`](../plugins/skill-router-server.ts) | Chọn root, chỉ đăng ký output after-hook |
+| [`plugins/skill-dialog-frame.tsx`](../plugins/skill-dialog-frame.tsx) | Footer Back/Done dùng JSX trong host dialog stack; modal shortcuts cleanup theo component |
+| [`src/native-skills.ts`](../src/native-skills.ts) | Catalog names, ON/OFF/REQUEST, safe errors, target guards và draft append |
+| [`src/project-skills.ts`](../src/project-skills.ts) | Private project opt-outs, exclusive writes, native config denies và skill before-hook |
+| [`plugins/skill-router-server.ts`](../plugins/skill-router-server.ts) | Cùng project root cho output after-hook và skill restrictions |
 | [`src/output-hooks.ts`](../src/output-hooks.ts) | Tool allowlist, giữ title/metadata |
 | [`src/output-governor.ts`](../src/output-governor.ts) | Normalize/classify, parse/fallback, save và final cap |
 | `src/*-output-compactor.ts` | Pure parser theo domain, không process/filesystem side effects |
@@ -43,25 +49,36 @@ flowchart TD
 | [`src/output-logs.ts`](../src/output-logs.ts) | Private exclusive save, flush và retention |
 
 `skills/` là nội dung mẫu có license riêng, không tự đăng ký/chạy. SDK chỉ được import
-làm type contract; runtime modules dùng built-ins và host API.
+làm type contract; server/core dùng built-ins và host API. TUI footer dùng JSX/OpenTUI và
+Solid runtime shared của host, không tạo renderer/Prompt mới. UI peers được pin để typecheck;
+Node unit tests inject frame adapter, không nạp live OpenTUI.
 
 ## 3. Hai luồng chính
 
 ### Skill request
 
 ```text
-Capture home/session target → host catalog → validate → browse/preview
- → revalidate skill + target → append request → check result/target → user reviews
+Capture directory/worktree/home/session → host catalog + project preferences → names
+ → ON/OFF: revalidate → save opt-out to original project → update bound UI
+ → REQUEST: revalidate + reread opt-outs → append → check result/target → user reviews
 ```
 
-Target gồm directory, route và session ID nếu có. Callbacks giữ target ban đầu, không
+Target gồm directory, project root/worktree, route và session ID nếu có. Callbacks giữ target ban đầu, không
 chọn lại target theo thời điểm click. Lifecycle signal được truyền cho append SDK call;
 dispose làm callbacks không còn tác dụng.
 
 Guard là kiểm tra client, không host transaction. API không có session ID/compare-and-append,
-nên in-flight outcome có thể uncertain. Không auto-retry, không tuyên bố loaded sau append;
+nên in-flight outcome có thể uncertain. View token vô hiệu callback sau Back/Done/Esc, chặn async completion reopen/clear UI mới.
+Không auto-retry, không tuyên bố loaded sau append;
 chi tiết UX và error codes có một nguồn chuẩn ở [Skills](skills.md#draft-safety).
 Không replace Prompt slots, intercept Enter, reset draft hoặc thêm scanner fallback.
+
+Project switches chỉ hỗ trợ local TUI/server cùng filesystem. Config hook thêm native
+skill deny (kể cả agent overrides) vào effective config lúc load; không ghi host config.
+Before-hook reread opt-outs trước mỗi native skill execution để chặn cả cached approvals.
+ON không nới cached native rules: restart host để dựng lại từ original config. Không hủy
+in-flight tools hoặc xóa instructions đã load; [Skills](skills.md#project-switches) sở hữu
+persistence, failure và privacy contract. Không chặn read/Bash hoặc tạo grant engine.
 
 ### Output
 
@@ -78,9 +95,11 @@ limits, privacy và retention có một nguồn chuẩn ở [Output](output.md).
 - Browser cần `app.skills` và `tui.appendPrompt`, route home/session và public dialogs/keymap API.
 - Dependency/type declarations pin theo `package.json`/lockfile; host source tham khảo là
   OpenCode `v1.19.3`. Pin/typecheck không chứng nhận mọi host version tương thích.
-- Catalog API có thể trả content cho preview; điều đó không có nghĩa body được đưa vào model context.
+- Catalog API có thể trả content, nhưng browser mới chỉ render names; body không tự vào model context.
 - Host có thể bỏ skill lỗi hoặc resolve duplicates trước response; plugin chỉ validate dữ liệu nhận được.
-- Không có runtime config/state riêng của OpenArms; library paths/permissions thuộc host config.
+- Chỉ có project opt-outs tối thiểu, không legacy state. Library paths và quyền nền thuộc host config.
+- Pinned plugin config callback còn dùng SDK legacy chưa type native skill permissions;
+  adapter validate riêng shape runtime host `1.19.3`. Typecheck không thay live acceptance.
 - Sửa source/restart không tự deploy installed runtime. [Migration](migration.md) sở hữu quy trình upgrade.
 
 **Tiếp theo:** [Development](development.md) để sửa code; [Verification](verification.md) để kiểm tra contract.
