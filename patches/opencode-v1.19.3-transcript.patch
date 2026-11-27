@@ -1,0 +1,146 @@
+diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes/session/index.tsx
+index e1f554f..62716c9 100644
+--- a/packages/tui/src/routes/session/index.tsx
++++ b/packages/tui/src/routes/session/index.tsx
+@@ -157,6 +157,7 @@ const context = createContext<{
+   conceal: () => boolean
+   thinkingMode: () => ThinkingMode
+   showThinking: () => boolean
++  compactTranscript: () => boolean
+   showTimestamps: () => boolean
+   showDetails: () => boolean
+   showGenericToolOutput: () => boolean
+@@ -185,6 +186,35 @@ export function Session() {
+   const sync = useSync()
+   const event = useEvent()
+   const project = useProject()
++  const [compactTranscript, setCompactTranscript] = createSignal(process.env.OPENARMS_COMPACT_TRANSCRIPT === "1")
++  if (process.env.OPENARMS_COMPACT_TRANSCRIPT === "1") {
++    const host = globalThis as typeof globalThis & Record<symbol, unknown>
++    const bridge = Symbol.for("openarms.compact-transcript.v1")
++    let disposed = false
++    let reading = false
++    const refresh = async () => {
++      const read = host[bridge]
++      if (reading || typeof read !== "function") return
++      const root = () => {
++        const paths = project.instance.path()
++        return paths.worktree && paths.worktree !== "/" ? paths.worktree : paths.directory
++      }
++      const currentRoot = root()
++      if (!currentRoot) return
++      reading = true
++      try {
++        const enabled = await read(currentRoot)
++        if (!disposed && root() === currentRoot) setCompactTranscript(enabled === true)
++      } catch {
++        if (!disposed && root() === currentRoot) setCompactTranscript(true)
++      } finally {
++        reading = false
++      }
++    }
++    void refresh()
++    const timer = setInterval(() => void refresh(), 1000)
++    onCleanup(() => { disposed = true; clearInterval(timer) })
++  }
+   const paths = useTuiPaths()
+   const tuiConfig = useTuiConfig()
+   const kv = useKV()
+@@ -1100,6 +1130,7 @@ export function Session() {
+           conceal,
+           thinkingMode,
+           showThinking,
++          compactTranscript,
+           showTimestamps,
+           showDetails,
+           showGenericToolOutput,
+@@ -1547,7 +1578,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
+   }
+ 
+   return (
+-    <Show when={content() || opaque()}>
++    <Show when={!ctx.compactTranscript() && (content() || opaque())}>
+       <box
+         ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+         paddingLeft={3}
+@@ -1645,11 +1676,15 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
+   const ctx = use()
+   const display = createMemo(() => toolDisplay(props.part.tool))
+ 
+-  // Hide tool if showDetails is false and tool completed successfully
++  const compact = () => ctx.compactTranscript() &&
++    !["todowrite", "question"].includes(display())
+   const shouldHide = createMemo(() => {
+-    if (ctx.showDetails()) return false
+-    if (props.part.state.status !== "completed") return false
+-    return true
++    const status = props.part.state.status
++    if (compact()) {
++      if (status === "pending" || status === "running") return false
++      return status !== "completed" || !isTranscriptFileChange(display())
++    }
++    return !ctx.showDetails() && status === "completed"
+   })
+ 
+   const toolprops = {
+@@ -1673,6 +1708,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
+   return (
+     <Show when={!shouldHide()}>
+       <Switch>
++        <Match when={compact()}>
++          <CompactTranscriptTool {...toolprops} display={display()} />
++        </Match>
+         <Match when={display() === "bash"}>
+           <Shell {...toolprops} />
+         </Match>
+@@ -1730,6 +1768,50 @@ type ToolProps = {
+   output?: string
+   part: ToolPart
+ }
++function isTranscriptFileChange(display: string) {
++  return ["apply_patch", "edit", "write"].includes(display)
++}
++
++function CompactTranscriptTool(props: ToolProps & { display: string }) {
++  const { theme } = useTheme()
++  const ctx = use()
++  const [expanded, setExpanded] = createSignal(false)
++  const paths = createMemo(() => {
++    if (props.display === "apply_patch") {
++      return parseApplyPatchFiles(props.metadata.files).map((file) => file.movePath ?? file.relativePath)
++    }
++    const path = stringValue(props.input.filePath)
++    return path ? [path] : []
++  })
++  const isChange = () => isTranscriptFileChange(props.display)
++  const summary = createMemo(() => {
++    if (isChange()) return paths().join(", ") || props.tool
++    const detail = ["command", "description", "filePath", "pattern", "url", "query", "name"]
++      .map((key) => stringValue(props.input[key]))
++      .find(Boolean)
++    return detail ? `${props.tool} ${detail}` : props.tool
++  })
++  const status = () => props.part.state.status
++  const error = () => props.part.state.status === "error" ? props.part.state.error : undefined
++  const details = () => isChange() ? error() : (error() ?? props.output)
++  const indent = 3 // Match the assistant text and native tool rows.
++  const label = createMemo(() => {
++    const suffix = status() === "error" ? " [error]" : status() !== "completed" ? ` [${status()}]` : ""
++    const line = (summary() + suffix).replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").trim()
++    const width = Math.max(1, ctx.width - indent)
++    if (width <= 3 && Bun.stringWidth(line) > width) return ".".repeat(width)
++    return Bun.stringWidth(line) <= width ? line : Bun.sliceAnsi(line, 0, width - 3) + "..."
++  })
++  return (
++    <box paddingLeft={indent} onMouseUp={() => details() && setExpanded((previous) => !previous)}>
++      <text fg={status() === "error" ? theme.error : theme.textMuted} wrapMode="none">{label()}</text>
++      <Show when={expanded() && details()}>
++        <text fg={theme.text}>{details()}</text>
++      </Show>
++    </box>
++  )
++}
++
+ function GenericTool(props: ToolProps) {
+   const { theme } = useTheme()
+   const ctx = use()
