@@ -35,6 +35,7 @@ function classify(file) {
   if (path.isAbsolute(file) || file.split(/[\\/]/).includes("..") || /[\x00-\x1f]/.test(file)) throw Error(`Unsafe scope: ${file}`)
   if (/^(docs\/|README\.md$|AGENTS\.md$|process\.md$)/.test(file)) return "docs"
   if (/^skills\//.test(file)) return "skill-content"
+  if (file === "patches/opencode-v1.19.3-transcript.patch") return "pinned OpenCode host patch"
   if (/^(src|plugins|tests|scripts|sandbox|prompts|examples|\.github)\//.test(file)) return "code / automation (including removed legacy paths)"
   if (["package.json", "package-lock.json", "tsconfig.json", "registry.json", ".dockerignore", ".gitignore", ".graphifyignore", "LICENSE"].includes(file)) return "metadata / configuration"
   throw Error(`needs-review: add a reviewed scope rule before checking ${file}`)
@@ -53,13 +54,15 @@ const run = argv => {
 function walk(folder) {
   return readdirSync(folder, { withFileTypes: true }).flatMap(entry => {
     const file = path.join(folder, entry.name)
-    if (entry.name === "archive" || entry.isSymbolicLink()) return []
+    if (entry.isSymbolicLink()) return []
     return entry.isDirectory() ? walk(file) : [file]
   })
 }
 function syntax() {
   run(["node_modules/typescript/lib/tsc.js", "--noEmit"])
-  for (const file of ["scripts/arms-test.mjs", ...walk("src"), ...walk("plugins"), ...walk("tests")]) {
+  const scripts = walk("scripts").filter(file => file.endsWith(".mjs"))
+  for (const file of scripts) run(["--check", file])
+  for (const file of [...scripts, ...walk("src"), ...walk("plugins"), ...walk("tests")]) {
     const source = readFileSync(file, "utf8")
     for (const match of source.matchAll(/(?:from\s*|import\s*)["'](\.[^"']+)["']/g)) {
       if (!existsSync(path.resolve(path.dirname(file), match[1]))) throw Error(`Missing import: ${file} → ${match[1]}`)
@@ -74,7 +77,7 @@ function syntax() {
       if (!existsSync(path.resolve(path.dirname(file), target))) throw Error(`Missing doc link: ${file} → ${target}`)
     }
   }
-  console.log("check: types, local imports and active documentation links passed (archive excluded)")
+  console.log("check: types, local imports and documentation links passed")
 }
 function policy() {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"))

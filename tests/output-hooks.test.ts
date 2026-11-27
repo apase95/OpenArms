@@ -6,9 +6,9 @@ import path from "node:path"
 import { outputHooks } from "../src/output-hooks.ts"
 import { SkillRouterServer } from "../plugins/skill-router-server.ts"
 
-test("server registers only output processing; no skill injection, usage or lifecycle hooks", async () => {
+test("server registers output and project skill restrictions only; no injection or lifecycle hooks", async () => {
   const hooks = await SkillRouterServer({ directory: "/unused", worktree: "/" } as any)
-  assert.deepEqual(Object.keys(hooks), ["tool.execute.after"])
+  assert.deepEqual(Object.keys(hooks).sort(), ["config", "tool.execute.after", "tool.execute.before"])
 })
 
 test("hook preserves failure metadata/title and only writes a raw log for transformed output", async t => {
@@ -36,13 +36,15 @@ test("hook preserves failure metadata/title and only writes a raw log for transf
 test("native skill and custom tool output bypass all transforms and persistence", async t => {
   const root = await mkdtemp(path.join(tmpdir(), "openarms-skill-bypass-"))
   t.after(() => rm(root, { recursive: true, force: true }))
-  const hook = outputHooks(root)["tool.execute.after"]
+  let featureReads = 0
+  const hook = outputHooks(root, async () => { featureReads++; throw Error("feature state unavailable") })["tool.execute.after"]
   for (const tool of ["skill", "custom_tool"]) {
     const raw = "\x00" + "instructions\n".repeat(20000)
     const output = { title: "native", output: raw, metadata: {} }
     await hook({ tool, args: {} }, output)
     assert.equal(output.output, raw)
   }
+  assert.equal(featureReads, 0)
   assert.deepEqual(await readdir(root), [])
 })
 

@@ -8,6 +8,7 @@
     "strict": true,
     "skipLibCheck": true,
     "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "plugins/**/*.ts", "plugins/**/*.tsx", "tests/**/*.ts"]

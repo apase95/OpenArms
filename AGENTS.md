@@ -1,6 +1,15 @@
 # Repository development guidance
 
-OpenArms has only two runtime features: native skill browsing and output compaction.
+OpenArms has native skills, output compaction and an optional compact transcript host patch.
+The explicit project-skill decision permits deny-only ON/OFF preferences in
+`.openarms/skills.json`, native in-memory permission denies and a skill before-hook.
+ON removes only OpenArms restrictions; it never grants host permission. This does not
+permit a grants/approval engine, global config writes or legacy state migration.
+Project-level feature controls are explicitly permitted in `.openarms/features.json`:
+skills-management, output-compaction and compact-transcript, default ON when supported.
+The Features menu must remain reachable with all features OFF. Disabling skills-management suspends OpenArms skill restrictions;
+it must not remove user-native denies or delete saved skill choices. Output OFF is a
+complete passthrough with no new raw-output artifacts.
 Do not reintroduce usage/budget, installers, session lifecycle, multi-agent workflow,
 permission/grant engines or automatic skill injection without a new explicit decision.
 
@@ -34,5 +43,9 @@ providers or operate on the user's OpenCode database/configuration.
 - Logs are private observed-output artifacts, not usage telemetry. Never edit `.gitignore`
   or delete conversation/state data as a side effect of running a tool.
 - Do not modify `~/.config/opencode`, install Git hooks, or deploy automatically.
-- Historical docs are in `docs/archive/`; do not execute their scripts or treat old
-  contracts as current. Keep active docs aligned with implemented behavior.
+- Docs are flat and topic-owned: use [the docs index](docs/README.md) to choose the
+  canonical page. Do not add duplicate overviews, sprint reports or archive folders.
+- Historical contracts are available through Git history, not current setup instructions.
+  Keep implemented behavior in the topic guides, checks/evidence in
+  [verification](docs/verification.md), and contributor workflow in
+  [development](docs/development.md).
