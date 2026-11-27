@@ -28,8 +28,8 @@ Hoặc merge vào host `opencode.json`, giữ settings khác:
 }
 ```
 
-Bundled `skills/` giữ license riêng; review trước khi dùng. OpenArms không tự đăng ký,
-parse frontmatter hoặc đọc package manifests legacy. Host quyết định resolve/refresh.
+OpenArms không kèm thư viện skill. Review nội dung và license của skill bên ngoài trước khi dùng.
+OpenArms không tự đăng ký, parse frontmatter hoặc đọc package manifests legacy. Host quyết định resolve/refresh.
 
 ## 2. Browser
 
