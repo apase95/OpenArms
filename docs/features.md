@@ -42,6 +42,9 @@ hoạt động theo native permissions của host.
 |---|---|---|
 | Skills management / `skills-management` | Browser, project skill switches, request và skill deny hooks hoạt động | Không mở browser/toggle/request qua OpenArms; config hook không thêm skill deny mới, before-hook không enforce opt-outs của OpenArms |
 | Output compaction / `output-compaction` | Supported tool text đi qua compaction, lưu observed original nếu thay đổi | Passthrough nguyên output/title/metadata; không normalize, cap, lưu artifact hay prune logs từ lần hook tiếp theo |
+| Compact transcript / `compact-transcript` | Tool call hiện một dòng khi chạy; giữ đường dẫn file đã sửa và ẩn Thought | Khôi phục renderer mặc định của OpenCode |
+
+**Compact transcript** chỉ có tác dụng trên OpenCode chạy với [bản vá host](architecture.md#compact-transcript-bản-vá-host-tùy-chọn). Gõ `/arms-skills` → **Features** → **Compact transcript** → **ON** hoặc **OFF**. Bản vá đọc lại lựa chọn của dự án đang mở khoảng mỗi giây; không cần restart sau khi đổi. Todos, câu hỏi tương tác và dữ liệu phiên không đổi.
 
 Log cutting, normalization và raw-output artifacts thuộc **một pipeline**, không tách
 thành các flags giả hoặc cho phép cắt output mà âm thầm mất evidence. Không có flag cho

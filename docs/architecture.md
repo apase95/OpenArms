@@ -70,7 +70,7 @@ Node unit tests inject frame/list adapters và kiểm tra pure helpers, không n
 ### Feature controls
 
 `/arms-skills` là slash command duy nhất, mở main menu; Features luôn truy cập được
-kể cả hai runtime features OFF. Skill browser là internal controller, không đăng ký lệnh riêng.
+kể cả khi tất cả runtime features OFF. Skill browser là internal controller, không đăng ký lệnh riêng.
 TUI lưu flag vào project cố định lúc mở, không gọi model/tool để mutate config. Backend
 reread flags khi chạy hooks, không chỉ đổi hiển thị UI. Persistence, failure policy và
 ý nghĩa OFF có nguồn chuẩn ở [Features](features.md). Không thêm flag riêng cho log cutting
@@ -114,6 +114,28 @@ After-hook observed text → require output-compaction ON → pure transform
 Artifact phải save/flush thành công mới có log reference. Parser/sink failure được diễn đạt
 bằng marker và bounded fallback, không raw exception hoặc status thành công giả. Định dạng,
 limits, privacy và retention có một nguồn chuẩn ở [Output](output.md).
+
+### Compact transcript (bản vá host tùy chọn)
+
+[Bản vá OpenCode v1.19.3](../patches/opencode-v1.19.3-transcript.patch) là nguồn
+chuẩn trong OpenArms cho giao diện transcript gọn. SDK TUI không có slot thay
+renderer của từng tool call, nên bản vá phải được áp dụng lên mã nguồn OpenCode;
+chỉ nạp plugin OpenArms sẽ không bật giao diện này.
+
+Launcher bật bản vá bằng `OPENARMS_COMPACT_TRANSCRIPT=1`. TUI plugin cung cấp
+trạng thái công tắc theo project qua bridge nội tiến trình; bản vá không tự ghi preferences.
+Khi bật, tool call chỉ
+hiện trong lúc chờ hoặc đang chạy. Khi kết thúc, transcript chỉ giữ đường dẫn từ
+các tool `write`, `edit` và `apply_patch` thành công. Các dòng này căn cùng lề với
+văn bản trả lời và có `...` nếu quá dài; các khối reasoning như `+ Thought:` được ẩn.
+Todos và câu hỏi
+tương tác vẫn dùng renderer gốc. Bản vá chỉ đổi hiển thị, không thay tool output
+mà model nhận và không sửa dữ liệu phiên.
+
+Khi bảo trì, cập nhật bản vá ở đây, dùng `git apply --check <đường-dẫn-bản-vá>`
+trên checkout OpenCode `v1.19.3` sạch, rồi áp dụng vào runtime cục bộ. Trên runtime
+đã vá, dùng `git apply --reverse --check <đường-dẫn-bản-vá>` để kiểm tra. OpenArms
+không tự cài đặt hay sửa launcher/cấu hình của host.
 
 ## 4. Host contract và compatibility
 
