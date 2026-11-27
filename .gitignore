@@ -15,6 +15,9 @@ sandbox/local/
 graphify-out/
 .opencode/
 
-# OpenArms runtime logs
-.openarms/logs/
-.openarms/.handoff-lock
+# Project-local agent state and optional private skill library
+/.claude/
+/.claude.json
+/.pi/
+/.pi.json
+/skills/

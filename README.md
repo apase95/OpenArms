@@ -89,4 +89,4 @@ retention tại trang Output trước khi sử dụng với source/credentials q
 
 ## License
 
-Engine dùng [MIT](LICENSE). Bundled `skills/` giữ license riêng và không tự đăng ký/chạy.
+Engine dùng [MIT](LICENSE). Repo không kèm thư viện skill; skill cài riêng giữ license riêng.

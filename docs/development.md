@@ -13,7 +13,6 @@ renderer/TTY; live TUI vẫn cần host tương thích và runtime shared do hos
 ```text
 plugins/   # Hai entry adapters
 src/       # Browser + output hooks/parsers/logs
-skills/    # Nội dung mẫu; không phải runtime code
 scripts/   # Thin check runner
 tests/     # Small offline unit suite
 docs/      # Tài liệu hiện hành, mỗi chủ đề một trang

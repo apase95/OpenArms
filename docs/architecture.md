@@ -58,7 +58,7 @@ flowchart TD
 | [`src/file-inspection-compactor.ts`](../src/file-inspection-compactor.ts) | Nhận diện binary/minified/long-line output |
 | [`src/output-logs.ts`](../src/output-logs.ts) | Private exclusive save, flush và retention |
 
-`skills/` là nội dung mẫu có license riêng, không tự đăng ký/chạy. SDK chỉ được import
+Thư viện skill được cài và quản lý riêng, không nằm trong repo này. SDK chỉ được import
 làm type contract; server/core dùng built-ins và host API. TUI footer và colored skill list dùng JSX/OpenTUI và
 Solid runtime shared của host, không tạo renderer/Prompt mới. Public host DialogSelect
 không có per-option title color nên chỉ catalog names dùng custom list trong host dialog stack;
