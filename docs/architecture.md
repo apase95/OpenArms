@@ -126,10 +126,12 @@ Launcher bật bản vá bằng `OPENARMS_COMPACT_TRANSCRIPT=1`. TUI plugin cung
 trạng thái công tắc theo project qua bridge nội tiến trình; bản vá không tự ghi preferences.
 Khi bật, tool call chỉ
 hiện trong lúc chờ hoặc đang chạy. Khi kết thúc, transcript chỉ giữ đường dẫn từ
-các tool `write`, `edit` và `apply_patch` thành công. Các dòng này căn cùng lề với
+các tool `write`, `edit` và `apply_patch` thành công. File trong thư mục dự án đang
+mở hiển thị tương đối với dấu `/` đầu dòng (ví dụ `/src/index.ts`); file bên ngoài
+không bị cắt tiền tố. Các dòng này căn cùng lề với
 văn bản trả lời và có `...` nếu quá dài; các khối reasoning như `+ Thought:` được ẩn.
-Todos và câu hỏi
-tương tác vẫn dùng renderer gốc. Bản vá chỉ đổi hiển thị, không thay tool output
+Footer của phản hồi hoàn thành thêm giờ kết thúc theo múi giờ cục bộ (ví dụ `2:50 AM`).
+Todos và câu hỏi tương tác vẫn dùng renderer gốc. Bản vá chỉ đổi hiển thị, không thay tool output
 mà model nhận và không sửa dữ liệu phiên.
 
 Khi bảo trì, cập nhật bản vá ở đây, dùng `git apply --check <đường-dẫn-bản-vá>`
