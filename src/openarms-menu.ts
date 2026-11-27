@@ -103,7 +103,9 @@ export function installOpenArmsMenu(api: TuiPluginApi, frame: DialogFrame,
         message: feature === "skills-management" && !enabled
           ? "Browser and OpenArms skill guards are disabled. Restart the host to remove cached OpenArms native denies; host permissions remain unchanged."
           : feature === "skills-management" ? "Saved per-skill choices apply again. Host permissions still apply."
-            : enabled ? "Subsequent supported tool output will be compacted when needed."
+            : feature === "compact-transcript"
+              ? "Applies to the current project in OpenCode with the OpenArms transcript patch."
+              : enabled ? "Subsequent supported tool output will be compacted when needed."
               : "Subsequent tool output is unchanged by OpenArms, with no new raw-output artifacts. Existing logs are preserved.",
       })
     } catch {

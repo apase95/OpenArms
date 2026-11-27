@@ -15,11 +15,16 @@ async function workspace(t: { after: (fn: () => Promise<void>) => void }) {
 
 test("only actual features are switchable, default ON without writes; settings persist and are project-isolated", async t => {
   const root = await workspace(t), other = await workspace(t), flags = projectFeatures(root)
-  assert.deepEqual(FEATURES.map(feature => feature.id), ["skills-management", "output-compaction"])
+  assert.deepEqual(FEATURES.map(feature => feature.id), ["skills-management", "output-compaction", "compact-transcript"])
+  assert.equal(await featureEnabled(flags, "compact-transcript"), true)
   assert.deepEqual(await flags.read(), [])
   assert.equal(await featureEnabled(flags, "skills-management"), true)
   assert.equal(await featureEnabled(flags, "output-compaction"), true)
   assert.deepEqual(await readdir(root), [])
+  await flags.set("compact-transcript", false)
+  assert.equal(await featureEnabled(projectFeatures(root), "compact-transcript"), false)
+  assert.equal(await featureEnabled(projectFeatures(other), "compact-transcript"), true)
+  await flags.set("compact-transcript", true)
   await projectSkills(root).set("writing", false)
   const originalSkills = await readFile(path.join(root, ".openarms/skills.json"), "utf8")
   await flags.set("skills-management", false)

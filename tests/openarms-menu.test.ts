@@ -59,7 +59,7 @@ test("only /arms-skills is registered and opens the full menu; feature actions a
   f.open()
   assert.deepEqual(f.dialog.options.map((row: any) => row.title), ["Skills management", "Output compaction", "Features"])
   await f.select("features")
-  assert.deepEqual(f.dialog.options.map((row: any) => row.title), ["Skills management", "Output compaction"])
+  assert.deepEqual(f.dialog.options.map((row: any) => row.title), ["Skills management", "Output compaction", "Compact transcript"])
   await f.select("output-compaction")
   assert.equal(f.dialog.title, "Output compaction · ON")
   assert.deepEqual(f.dialog.options.map((row: any) => row.title), ["ON", "OFF"])

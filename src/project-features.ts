@@ -4,6 +4,7 @@ import { projectSwitches, type ProjectSwitches } from "./project-switches.ts"
 export const FEATURES = [
   { id: "skills-management", name: "Skills management" },
   { id: "output-compaction", name: "Output compaction" },
+  { id: "compact-transcript", name: "Compact transcript" },
 ] as const
 export type FeatureID = typeof FEATURES[number]["id"]
 export type ProjectFeatures = ProjectSwitches<FeatureID>
