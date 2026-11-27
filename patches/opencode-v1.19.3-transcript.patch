@@ -1,5 +1,5 @@
 diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes/session/index.tsx
-index e1f554f..62716c9 100644
+index e1f554f..55db991 100644
 --- a/packages/tui/src/routes/session/index.tsx
 +++ b/packages/tui/src/routes/session/index.tsx
 @@ -157,6 +157,7 @@ const context = createContext<{
@@ -54,7 +54,23 @@ index e1f554f..62716c9 100644
            showTimestamps,
            showDetails,
            showGenericToolOutput,
-@@ -1547,7 +1578,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
+@@ -1499,6 +1530,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
+               <Show when={duration()}>
+                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+               </Show>
++              <Show when={ctx.compactTranscript() && !props.message.error && props.message.time.completed}>
++                {(completed) => (
++                  <span style={{ fg: theme.textMuted }}>
++                    {" · " + new Date(completed()).toLocaleTimeString("en-US", {
++                      hour: "numeric", minute: "2-digit", hour12: true,
++                    })}
++                  </span>
++                )}
++              </Show>
+               <Show when={props.message.error?.name === "MessageAbortedError"}>
+                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
+               </Show>
+@@ -1547,7 +1587,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
    }
  
    return (
@@ -63,7 +79,7 @@ index e1f554f..62716c9 100644
        <box
          ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
          paddingLeft={3}
-@@ -1645,11 +1676,15 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
+@@ -1645,11 +1685,15 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
    const ctx = use()
    const display = createMemo(() => toolDisplay(props.part.tool))
  
@@ -83,7 +99,7 @@ index e1f554f..62716c9 100644
    })
  
    const toolprops = {
-@@ -1673,6 +1708,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
+@@ -1673,6 +1717,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
    return (
      <Show when={!shouldHide()}>
        <Switch>
@@ -93,7 +109,7 @@ index e1f554f..62716c9 100644
          <Match when={display() === "bash"}>
            <Shell {...toolprops} />
          </Match>
-@@ -1730,6 +1768,50 @@ type ToolProps = {
+@@ -1730,6 +1777,65 @@ type ToolProps = {
    output?: string
    part: ToolPart
  }
@@ -101,16 +117,31 @@ index e1f554f..62716c9 100644
 +  return ["apply_patch", "edit", "write"].includes(display)
 +}
 +
++function compactChangedPath(file: string, directory: string) {
++  if (!path.isAbsolute(directory)) return file
++  const root = path.resolve(directory)
++  // Some tool results include an absolute path without the leading slash.
++  const slashlessRoot = root.slice(1)
++  const target = !path.isAbsolute(file) && slashlessRoot && file.startsWith(slashlessRoot + path.sep)
++    ? path.sep + file
++    : path.resolve(root, file)
++  const relative = path.relative(root, target)
++  if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) return file
++  return "/" + relative.split(path.sep).join("/")
++}
++
 +function CompactTranscriptTool(props: ToolProps & { display: string }) {
 +  const { theme } = useTheme()
 +  const ctx = use()
 +  const [expanded, setExpanded] = createSignal(false)
++  const project = useProject()
 +  const paths = createMemo(() => {
++    const directory = project.instance.directory() || project.instance.path().directory
 +    if (props.display === "apply_patch") {
-+      return parseApplyPatchFiles(props.metadata.files).map((file) => file.movePath ?? file.relativePath)
++      return parseApplyPatchFiles(props.metadata.files).map((file) => compactChangedPath(file.movePath ?? file.filePath, directory))
 +    }
-+    const path = stringValue(props.input.filePath)
-+    return path ? [path] : []
++    const file = stringValue(props.input.filePath)
++    return file ? [compactChangedPath(file, directory)] : []
 +  })
 +  const isChange = () => isTranscriptFileChange(props.display)
 +  const summary = createMemo(() => {
